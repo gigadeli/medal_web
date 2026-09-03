@@ -1,0 +1,40 @@
+.root {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(3, 5, 10, .78);
+  opacity: 1;             /* opacity はアニメーションさせない (下のコメント参照) */
+  pointer-events: auto;   /* #ui-root は none なので、ここだけ有効化する */
+}
+
+/* 重いフレームでは opacity のアニメーションが途中で止まったまま張り付くことがある
+   (CSS transition で同じ症状を踏んだ。DESIGN.md §9)。
+   出現の動きは transform だけで付け、透明度は最初から確定させておく。
+   transform なら途中で止まってもカードが少しずれるだけで済む。 */
+
+.card {
+  min-width: 300px; padding: 28px 32px 24px; border-radius: 16px;
+  background: rgba(8, 12, 22, .96);
+  border: 1px solid rgba(255, 77, 94, .4);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, .7);
+  text-align: center;
+  animation: rise .28s ease-out;
+}
+@keyframes rise { from { transform: translateY(10px) scale(.96); } to { transform: none; } }
+
+.title {
+  font-size: 13px; letter-spacing: .34em; color: var(--danger); margin-bottom: 16px;
+}
+.rows {
+  display: grid; grid-template-columns: auto auto; gap: 4px 18px;
+  font-size: 13px; color: var(--dim); margin-bottom: 22px;
+}
+.rows b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.rows .hi { color: var(--accent); font-size: 15px; }
+
+.button {
+  font: inherit; font-size: 13px; letter-spacing: .18em; font-weight: 600;
+  color: #0a0e18; background: var(--accent);
+  border: 0; border-radius: 8px; padding: 11px 26px; cursor: pointer;
+}
+.button:hover { filter: brightness(1.08); }
+.note { margin-top: 12px; font-size: 11px; color: var(--dim); }

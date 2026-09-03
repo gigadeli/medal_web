@@ -1,0 +1,36 @@
+/* UI 全体で共有するトークンとリセット。個々の見た目は *.module.css 側にある */
+:root {
+  --ink: #f4f7ff;
+  --dim: #8ea0c0;
+  --accent: #ffcf5c;
+  --gold: #ffb03a;
+  --cyan: #5cc8ff;
+  --danger: #ff4d5e;
+
+  --panel-bg: rgba(8, 12, 22, 0.62);
+  --panel-border: rgba(140, 165, 210, 0.18);
+  --panel-radius: 10px;
+
+  --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;   /* 3D 側の操作を邪魔しない。必要な要素だけ個別に有効化する */
+  font-family: var(--font);
+  color: var(--ink);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* パネルの共通見た目。各コンポーネントはこれに自分の位置だけ足す */
+.panel {
+  position: absolute;
+  padding: 10px 16px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--panel-radius);
+  backdrop-filter: blur(6px);
+}

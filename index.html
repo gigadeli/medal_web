@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Medal Pusher</title>
+<style>
+  /* ここに置くのは「JS が読み込まれる前に必要な最低限」だけ。
+     UI のスタイルは React 側 (src/ui/theme.css と各 *.module.css) にある */
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: #05070d;
+  }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+</style>
+</head>
+<body>
+  <!-- three.js の canvas が入る -->
+  <div id="app"></div>
+  <!-- React の UI レイヤ -->
+  <div id="ui-root"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
