@@ -67,17 +67,11 @@ export class Cabinet {
   }
 
   _buildPlayfield() {
-    // --- 下段テーブル (2枚に分かれており、手前左右の隙間がサイドポケットになる) ---
+    // --- 下段テーブル (奥の一枚板だけ。手前左右の隙間がサイドポケットになる) ---
     this._box(L.tableMain, this.matTable, { friction: CFG.table.friction });
-    this._box(L.tableFront, this.matTable, { friction: CFG.table.friction });
 
-    // --- サイドポケットの縁マーキング (穴の中には何も置かない) ---
-    for (const sx of [-1, 1]) {
-      this._box(
-        { x: sx * (L.pocketX + 0.06), y: 0.02, z: L.tableFront.z, w: 0.12, h: 0.1, d: L.tableFront.d },
-        this.matGlowRed, { visualOnly: true }
-      );
-    }
+    // 手前のテーブル (勾配 + チャッカーの穴) は TiltTable が持つ。
+    // フィーバー中に傾きが変わるので Fixed ではいられない (DESIGN_GIMMICKS.md §3.3)
   }
 
   _buildEnclosure() {
@@ -100,17 +94,19 @@ export class Cabinet {
     const fz = 6.45;
     // 下枠はテーブル面(y=0)より下に置くこと。上に置くと落下口まわりが隠れて
     // 「押し出されて落ちる」いちばん見たい瞬間が見えなくなる
+    // 下枠は払い出しスロープ (z 6.05〜8.24, y -0.3〜-1.5) を避けて、
+    // その先端の下に置く。掛けるとメダルが枠を突き抜けて見える
     const frames = [
       { x: 0, y: 12.2, z: fz, w: 15.4, h: 0.5, d: 0.5 },
-      { x: 0, y: -0.25, z: fz + 0.25, w: 15.4, h: 0.5, d: 0.5 },
+      { x: 0, y: -1.95, z: 8.6, w: 13.0, h: 0.5, d: 0.5 },
       { x: -7.4, y: 6.0, z: fz, w: 0.5, h: 13.0, d: 0.5 },
       { x: 7.4, y: 6.0, z: fz, w: 0.5, h: 13.0, d: 0.5 },
     ];
     for (const f of frames) this._box(f, this.matFrame, { visualOnly: true, castShadow: true });
 
-    // 払い出し口 (ガラス下の開口) の光る縁
+    // 受け皿の光る縁。スロープの先端の真下
     this._box(
-      { x: 0, y: -0.62, z: 6.72, w: 11.5, h: 0.16, d: 0.5 },
+      { x: 0, y: -1.62, z: 8.55, w: 11.5, h: 0.16, d: 0.5 },
       this.matGlow, { visualOnly: true }
     );
 

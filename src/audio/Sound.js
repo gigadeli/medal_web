@@ -186,6 +186,152 @@ export class Sound {
     }
   }
 
+  /* ---- スロットの演出 (DESIGN_GIMMICKS.md §3.9) ---- */
+
+  /**
+   * 予告音。実機の「通常予告音 / 強予告音」に相当する。
+   * heat が上がるほど高く、長く、倍音が増える
+   */
+  notice(heat) {
+    if (heat <= 0) return;
+    const base = 330 * Math.pow(1.18, heat);
+    this._tone(base, 0.10 + heat * 0.03, 'triangle', 0.20);
+    this._tone(base * 1.5, 0.16 + heat * 0.05, 'sine', 0.16, 0.06);
+    if (heat >= 3) this._tone(base * 2, 0.30, 'square', 0.12, 0.12);
+    if (heat >= 5) this._tone(base * 3, 0.45, 'sawtooth', 0.10, 0.18);
+  }
+
+  /** 擬似連。止まりかけたリールが再始動する */
+  pseudo(n = 1) {
+    this._tone(180, 0.10, 'square', 0.26);
+    this._tone(520 + n * 120, 0.42, 'sawtooth', 0.16, 0.05, 1100 + n * 250);
+  }
+
+  /** カットイン。画面を横切る帯 */
+  cutIn(heat) {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noise;
+    src.playbackRate.value = 1.6;
+    const bp = this.ctx.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(900, t);
+    bp.frequency.exponentialRampToValueAtTime(5200, t + 0.22);
+    bp.Q.value = 2.2;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.45, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t); src.stop(t + 0.32);
+    this._tone(160 + heat * 40, 0.5, 'sawtooth', 0.18, 0, 900);
+  }
+
+  /** フリーズ。全部止まる = 当たり濃厚 */
+  freeze() {
+    this._tone(1760, 0.05, 'sine', 0.30);
+    // 無音の間を作りたいので、余韻は短く切って「止まった感じ」を出す
+    this._tone(2640, 0.06, 'sine', 0.22, 0.05);
+    this._tone(110, 1.0, 'sine', 0.20, 0.16, 70);
+  }
+
+  /** 第3リールの滑り。当たり絵柄を一瞬見せてから1つずれる */
+  slip() {
+    this._tone(600, 0.07, 'square', 0.18, 0, 380);
+    this._tone(300, 0.14, 'triangle', 0.14, 0.06, 200);
+  }
+
+  /* ---- ギミック (DESIGN_GIMMICKS.md) ---- */
+
+  /** 保留が満杯で、入賞が倍率に化けた */
+  oddsUp() {
+    this._tone(740, 0.09, 'square', 0.20);
+    this._tone(1480, 0.16, 'triangle', 0.16, 0.06);
+  }
+
+  /** フィーバーのステップが1つ進んだ。残りが少ないほど高く鳴らす */
+  step(n, max) {
+    const f = 440 * Math.pow(1.26, Math.min(n, max));
+    this._tone(f, 0.16, 'square', 0.24);
+    this._tone(f * 1.5, 0.28, 'triangle', 0.16, 0.07);
+  }
+
+  /** フィーバー突入 */
+  feverStart() {
+    const notes = [392, 523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((f, i) => this._tone(f, 0.22, 'square', 0.22, i * 0.08));
+    this._tone(180, 1.1, 'sawtooth', 0.14, 0, 1400);
+  }
+
+  /** フィーバー終了 */
+  feverEnd() {
+    this._tone(880, 0.45, 'triangle', 0.16, 0, 330);
+  }
+
+  /** ジャックポットのタワーを1段積んだ。progress 0..1 で音程が上がる */
+  stack(progress) {
+    this._tone(320 + progress * 900, 0.07, 'square', 0.14);
+  }
+
+  /** タワーを崩しにいく前進 */
+  sweep() {
+    this._tone(90, 1.4, 'sawtooth', 0.20, 0, 260);
+  }
+
+  /** 台パン */
+  bump() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noise;
+    src.playbackRate.value = 0.4;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 420;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.7, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.3);
+    this._tone(70, 0.25, 'sine', 0.35, 0, 40);
+  }
+
+  /** 効かない操作 */
+  tick() {
+    this._tone(200, 0.05, 'square', 0.09);
+  }
+
+  /** TILT */
+  tiltAlarm() {
+    for (let i = 0; i < 4; i++) this._tone(i % 2 ? 300 : 460, 0.14, 'square', 0.26, i * 0.16);
+  }
+
+  /** 特殊メダルを入手した */
+  grant() {
+    this._tone(1046.5, 0.10, 'triangle', 0.20);
+    this._tone(1568, 0.20, 'sine', 0.16, 0.07);
+  }
+
+  /** ボムが爆発した */
+  explode() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this._noise;
+    src.playbackRate.value = 0.55;
+    const lp = this.ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2600, t);
+    lp.frequency.exponentialRampToValueAtTime(220, t + 0.35);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(0.6, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.42);
+  }
+
   /** ジャックポット */
   jackpot() {
     const notes = [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5, 1318.5];

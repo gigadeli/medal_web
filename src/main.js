@@ -3,6 +3,9 @@ import { Stage } from './core/Renderer.js';
 import { Loop } from './core/Loop.js';
 import { createPhysics } from './physics/World.js';
 import { Cabinet } from './game/Cabinet.js';
+import { TiltTable } from './game/TiltTable.js';
+import { Shutters } from './game/Shutters.js';
+import { PayoutChute } from './game/PayoutChute.js';
 import { Pusher } from './game/Pusher.js';
 import { MedalPool } from './game/MedalPool.js';
 import { Dispenser } from './game/Dispenser.js';
@@ -11,6 +14,11 @@ import { Hopper } from './game/Hopper.js';
 import { LotteryBallSet } from './game/LotteryBall.js';
 import { SlotMachine } from './game/SlotMachine.js';
 import { SlotDisplay } from './game/SlotDisplay.js';
+import { FeverMode } from './game/FeverMode.js';
+import { Jackpot } from './game/Jackpot.js';
+import { JackpotShow } from './game/JackpotShow.js';
+import { Bump } from './game/Bump.js';
+import { SpecialMedals } from './game/SpecialMedals.js';
 import { AntiJam } from './game/AntiJam.js';
 import { Wallet } from './game/Wallet.js';
 import { SaveStore } from './save/SaveStore.js';
@@ -28,6 +36,14 @@ const GAIN_POP_INTERVAL = 0.12;
  *
  * UI を先にマウントしてローディングを出してから、Rapier の WASM 初期化を待つ。
  * ゲームループは React を知らない。mountUI が返すハンドル経由でストアに書くだけ。
+ *
+ * ギミック群 (DESIGN_GIMMICKS.md) の配線もここに集約してある。
+ * 各ギミックはお互いを知らず、コールバックだけを外に出している:
+ *
+ *   チャッカー → スロット / フリッパー / JP メーター
+ *   ボール     → フィーバーの STEP
+ *   ロスト     → JP メーター / チケット
+ *   青7        → JP 当選 → タワー演出
  */
 async function main() {
   const sound = new Sound();
@@ -45,6 +61,16 @@ async function main() {
   const wallet = new Wallet();
   if (saved) wallet.restore(saved);
 
+  // JP は物理を必要としないので先に作れる。
+  // ここを復元しないと開くたびに初期値へ戻り、積み立ての意味が消える (§3.4)
+  const jackpot = new Jackpot();
+  if (saved) jackpot.restore(saved.jackpot);
+
+  // 物理ができてから作るもの。UI のコールバックからは遅延参照する
+  let special = null;
+  let bump = null;
+  let fever = null;
+
   // 場の枚数は物理ができてからでないと数えられないので、あとで差し替える
   let currentFieldStock = () => fieldStock;
 
@@ -54,6 +80,9 @@ async function main() {
     savedAt: Date.now(),
     fieldStock: currentFieldStock(),
     settings: { muted: sound.muted },
+    jackpot: jackpot.serialize(),
+    special: special ? special.serialize() : undefined,
+    steps: fever ? fever.steps : 0,
     ...wallet.serialize(),
   });
   const persist = () => SaveStore.save(snapshot());
@@ -65,8 +94,13 @@ async function main() {
       // 識別子も一緒に消す (§11.3)。同じ ID が残ると「消した」ことにならない
       userId = SaveStore.newUserId();
       wallet.reset(true);
+      jackpot.reset(true);
+      if (special) special.reset(true);
+      if (fever) fever.reset();
       persist();               // 消した直後の状態を書き直す
     },
+    onSelectSpecial: (kind) => special && special.select(kind),
+    onBump: () => bump && bump.hit(),
   });
 
   // ストアへの反映は UI ができてから配線する (Wallet 側は UI も保存も知らない)
@@ -81,6 +115,13 @@ async function main() {
   };
   wallet.onChange(wallet);
 
+  jackpot.onChange = (j) => {
+    ui.setGame({ jp: j.display });
+    // JP は毎フレーム 0.05 ずつ動くので、ここから persist は呼ばない。
+    // Wallet 側の変化 (投入・払い出し) に相乗りすれば十分な頻度になる
+  };
+  jackpot.onChange(jackpot);
+
   // タブを閉じる / 隠れるときに書き切る。
   // beforeunload はモバイルのアプリ切り替えで発火しないので使わない
   const flush = () => { SaveStore.save(snapshot()); SaveStore.flush(); };
@@ -94,6 +135,12 @@ async function main() {
     const stage = new Stage(document.getElementById('app'));
 
     const cabinet = new Cabinet(stage.scene, world, RAPIER);
+    // 手前のテーブルだけは Fixed ではいられない。フィーバー中に傾く (§3.3)
+    const table = new TiltTable(stage.scene, world, RAPIER);
+    const shutters = new Shutters(stage.scene, world, RAPIER);
+    // 払い出しスロープ。チャッカーもフリッパーもここに載っている。
+    // 盤面の上に穴や板を置くと山の力の連鎖が切れて機械が止まる (§3.1 の実測)
+    const chute = new PayoutChute(stage.scene, world, RAPIER);
     const pusher = new Pusher(stage.scene, world, RAPIER);
     const pool = new MedalPool(stage.scene, world, RAPIER);
     const balls = new LotteryBallSet(stage.scene, world, RAPIER);
@@ -103,51 +150,136 @@ async function main() {
       ui.setGame({ lastWinIndex: index, lastWinSeq: Date.now() })
     );
 
-    let lastGainPop = -1;
-    const payout = new Payout(pool, {
-      onGain: () => {
-        wallet.earn(1);
-        sound.payout();
-        if (loop.simTime - lastGainPop >= GAIN_POP_INTERVAL) {
-          lastGainPop = loop.simTime;
-          ui.popGain(1);
-        }
-      },
-      onLost: () => wallet.recordLost(1),
-    });
-
     const hopper = new Hopper(pool);
     const antiJam = new AntiJam(pool);
+
+    special = new SpecialMedals({
+      pool, sound,
+      onChange: (s) => ui.setGame({
+        gold: s.stock.gold, bomb: s.stock.bomb, ticket: s.stock.ticket,
+        selected: s.selected || '',
+      }),
+    });
+    if (saved) special.restore(saved.special);
+
+    bump = new Bump({
+      pool, sound, stage,
+      onChange: (b) => ui.setGame({ bumpCooldown: b.cooldown, tilt: b.tilt }),
+    });
+
+    const jpShow = new JackpotShow({
+      pusher, pool, hopper, world, sound,
+      onPhase: (s) => {
+        ui.setGame({ jpPhase: s.phase === 'idle' ? '' : s.phase });
+        // 演出中は台を明け渡す。フィーバーと同時に動かすと駆動の指示が競合する
+        if (s.phase === 'idle') fever.resume();
+        else fever.suspend();
+      },
+    });
+
     const slot = new SlotMachine({
       hopper,
       sound,
       present: (res) => slotDisplay.play(res),
-      onDraw: (res) => wallet.recordSpin(res),
+      onDraw: (res) => {
+        wallet.recordSpin(res);
+        // リプレイ役でゴールドメダルを1枚配る (§3.7)
+        if (res.symbol.id === 'replay') special.grant('gold');
+      },
+      onJackpot: () => {
+        const won = jackpot.claim();
+        wallet.recordJackpot(won);
+        jpShow.start(won);
+      },
+    });
+
+    fever = new FeverMode({
+      pusher, table, shutters, chute, pool, sound,
+      onChange: (f) => ui.setGame({
+        steps: f.steps, stepsMax: f.stepsMax,
+        feverLeft: f.active ? Math.ceil(f.left) : 0,
+      }),
+      // フィーバーを抜けたらボムを1枚。次の詰まりを自分で崩せる
+      onExit: () => special.grant('bomb'),
+    });
+    if (saved && Number.isFinite(saved.steps)) fever.steps = saved.steps;
+    fever.onChange(fever);
+
+    let lastGainPop = -1;
+    const payout = new Payout(pool, {
+      onGain: (medal) => {
+        // 特殊メダルはここで効果に変わる。ゴールドなら1枚が5枚になる
+        const extra = special.resolveDrop(medal);
+        const gain = 1 + extra.credit;
+        wallet.earn(gain);
+        if (extra.spin) slot.request();
+        sound.payout();
+        if (loop.simTime - lastGainPop >= GAIN_POP_INTERVAL) {
+          lastGainPop = loop.simTime;
+          ui.popGain(gain);
+        }
+      },
+      onLost: () => {
+        wallet.recordLost(1);
+        // 損を期待に変える2本の線 (§3.4 / §3.7)
+        jackpot.onLost(1);
+        special.onLost(1);
+      },
+      onChucker: (chuckerSlot) => {
+        if (chuckerSlot.kind === 'start') {
+          slot.request();
+        } else {
+          chute.triggerFlippers();
+          jackpot.onChance(1);
+          sound.chucker();
+        }
+      },
     });
 
     const dispenser = new Dispenser(
       stage.scene, stage.camera, stage.renderer.domElement, pool,
       {
-        canInsert: () => wallet.canInsert(),
-        onInsert: () => wallet.spend(1),
+        // TILT 中は投入できない (§3.8)
+        canInsert: () => wallet.canInsert() && bump.tilt <= 0,
+        getSpawnOptions: () => special.takeSpawnOptions(),
+        onInsert: (medal) => {
+          wallet.spend(1);
+          jackpot.onInsert(1);
+          special.track(medal);
+        },
       }
     );
 
-    const debug = new Debug({ scene: stage.scene, world, pool, stage, payout, slot, hopper, balls });
+    const debug = new Debug({
+      scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
+      pusher, table, fever, jackpot, jpShow, special, bump, chute,
+    });
 
     prefill(pool, fieldStock);
     currentFieldStock = () => pool.activeCount;
     ui.setGame({ holdMax: CFG.slot.maxQueue });
+
+    // 台パンのカメラ揺れは OrbitControls の後に入れないと打ち消される
+    stage.onBeforeRender = () => bump.syncCamera(loop.lastRealDt || 0);
 
     let statsTimer = 0;
     let lastMuted = sound.muted;
 
     const loop = new Loop(
       // ---- 固定タイムステップ (物理) ----
-      (dt, t) => {
+      (dt) => {
         dispenser.update(dt);
         hopper.update(dt);
-        pusher.update(t + dt);      // 次ステップ終了時の目標位置
+        special.update(dt);        // ボムの導火線
+        bump.update(dt);
+
+        // キネマティックな部品は world.step() の前に「次の位置」を与える
+        chute.update(dt);
+        shutters.update(dt);
+        table.update(dt);
+        fever.update(dt);
+        jpShow.update(dt);
+        pusher.update(dt);
 
         world.step(eventQueue || undefined);
 
@@ -159,29 +291,46 @@ async function main() {
         }
 
         pool.captureTransforms();
-        pool.wakeNear(pusher.frontZ(t + dt));
+        pool.wakeNear(pusher.frontZ());
 
-        // 抽選ボールが落ちたらスロットを回す (サイドポケットはハズレ)
+        // ボールが落ちたらフィーバーの STEP が進む (サイドポケットはハズレ)
         const fell = balls.update(dt);
-        for (let i = 0; i < fell.payout; i++) slot.request();
+        for (let i = 0; i < fell.payout; i++) fever.addStep();
         if (fell.pocket > 0) sound.lose();
 
         payout.update();
-        antiJam.update(dt, payout.credit + payout.lost, pusher.frontZ(t + dt));
+        // タワーを積んでいる最中に揺さぶると自壊する
+        if (!jpShow.running) {
+          antiJam.update(dt, payout.credit + payout.lost + payout.chucker, pusher.frontZ());
+        }
         wallet.update(dt);
       },
       // ---- 描画 ----
       (alpha, realDt) => {
         debug.beginFrame();
         sound.beginFrame();
+        loop.lastRealDt = realDt;
 
-        // 補間後の見かけ上の時刻。メダルの lerp と足並みを揃える
-        const renderTime = loop.simTime - (1 - alpha) * loop.dt;
-        pusher.syncMesh(renderTime);
+        pusher.syncMesh(alpha);
+        table.syncMesh();
+        shutters.syncMesh();
+        chute.syncMesh();
         dispenser.syncMesh();
         balls.syncMesh(alpha);
         slotDisplay.update(realDt);
         pool.sync(alpha);
+
+        // 液晶の常時表示。中で浅い比較をするので毎フレーム呼んでよい
+        slotDisplay.setMeters({
+          jp: jackpot.display,
+          odds: slot.odds,
+          hold: slot.held,
+          holdMax: CFG.slot.maxQueue,
+          steps: fever.steps,
+          stepsMax: fever.stepsMax,
+          fever: fever.active ? fever.left : 0,
+          tilt: bump.tilt,
+        });
 
         stage.render();
 
@@ -189,6 +338,7 @@ async function main() {
         // 持ち枚数まわりは Wallet の onChange から流れてくるのでここには無い
         ui.setGame({
           hold: slot.held,
+          odds: slot.odds,
           muted: sound.muted,
         });
         // M キーでの切り替えは Wallet を経由しないので、ここで拾って保存する
@@ -221,8 +371,9 @@ async function main() {
 
     // コンソールから触れるように
     window.game = {
-      CFG, world, stage, pool, pusher, balls, payout,
-      dispenser, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam, wallet, ui,
+      CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
+      dispenser, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
+      wallet, ui, fever, jackpot, jpShow, bump, special,
     };
   } catch (err) {
     console.error(err);

@@ -15,9 +15,11 @@ export class Dispenser {
     this.camera = camera;
     this.dom = domElement;
     this.pool = pool;
-    // 持ち枚数が尽きていれば投入させない
+    // 持ち枚数が尽きていれば投入させない。TILT 中もここで止める
     this.canInsert = hooks.canInsert || (() => true);
     this.onInsert = hooks.onInsert || (() => {});
+    // 特殊メダル (DESIGN_GIMMICKS.md §3.7)。null を返せば通常メダル
+    this.getSpawnOptions = hooks.getSpawnOptions || (() => null);
 
     this.x = 0;
     this.cooldown = 0;
@@ -41,20 +43,21 @@ export class Dispenser {
     scene.add(this.marker);
 
     // 投入口のリング
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(0.85, 0.09, 8, 32),
-      new THREE.MeshStandardMaterial({
-        color: 0x1a2436, emissive: 0x5cc8ff, emissiveIntensity: 1.5, roughness: 0.4,
-      })
-    );
+    this.ringMat = new THREE.MeshStandardMaterial({
+      color: 0x1a2436, emissive: 0x5cc8ff, emissiveIntensity: 1.5, roughness: 0.4,
+    });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.09, 8, 32), this.ringMat);
     ring.rotation.x = Math.PI / 2;
     this.marker.add(ring);
 
     // 落下位置を示すガイド線
     const h = L.spawn.y - L.deckHeight;
+    this.guideMat = new THREE.MeshBasicMaterial({
+      color: 0x5cc8ff, transparent: true, opacity: 0.22,
+    });
     const guide = new THREE.Mesh(
       new THREE.CylinderGeometry(0.035, 0.035, h, 6),
-      new THREE.MeshBasicMaterial({ color: 0x5cc8ff, transparent: true, opacity: 0.22 })
+      this.guideMat
     );
     guide.position.y = -h / 2;
     this.marker.add(guide);
@@ -114,13 +117,27 @@ export class Dispenser {
 
     this.cooldown -= dt;
     if ((this.pending || this.holding) && this.cooldown <= 0) {
-      if (this.canInsert() && this.pool.spawn(this.x)) {
-        this.inserted++;
-        this.cooldown = CFG.input.dropCooldown;
-        this.onInsert();
+      // 空きの確認を先に済ませる。特殊メダルの手持ちを減らしてから
+      // 満杯で弾かれると、1枚が黙って消えることになる
+      if (this.canInsert() && this.pool.freeCount > 0) {
+        const opts = this.getSpawnOptions();
+        const medal = this.pool.spawn(this.x, L.spawn.y, L.spawn.z, opts);
+        if (medal) {
+          this.inserted++;
+          this.cooldown = CFG.input.dropCooldown;
+          this.onInsert(medal);
+        }
       }
       this.pending = false;
     }
+  }
+
+  /** 特殊メダルを選んでいる間はマーカーの色を変える */
+  setMarkerColor(hex) {
+    if (this._markerColor === hex) return;
+    this._markerColor = hex;
+    this.ringMat.emissive.setHex(hex);
+    this.guideMat.color.setHex(hex);
   }
 
   syncMesh() {

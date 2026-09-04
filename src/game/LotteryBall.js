@@ -161,7 +161,8 @@ export class LotteryBall {
     }
 
     if (this.currP.y < L.fallY) {
-      const pocket = Math.abs(this.currP.x) > L.pocketX;
+      // サイドポケットは z 3.0〜6.0 の左右だけ。払い出しスロープの端は違う
+      const pocket = Math.abs(this.currP.x) > L.pocketX && this.currP.z < L.pocketZEnd;
       this._park();
       this.state = 'returning';
       this.timer = B.returnDelay;

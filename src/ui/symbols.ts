@@ -7,6 +7,8 @@ export type SlotSymbol = {
   color: string;
   weight: number;
   pay: number;
+  /** 枚数ではなくジャックポット当選になる役 (DESIGN_GIMMICKS.md §3.4) */
+  jp?: boolean;
 };
 
 /**

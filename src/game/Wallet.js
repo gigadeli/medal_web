@@ -4,6 +4,8 @@ const zeroRun = () => ({ inserted: 0, earned: 0, lost: 0 });
 const zeroLifetime = () => ({
   inserted: 0, earned: 0, lost: 0, games: 0,
   slot: { spins: 0, wins: 0, byId: {} },
+  // ジャックポットの当選回数と通算獲得枚数 (DESIGN_GIMMICKS.md §3.4)
+  jp: { wins: 0, paid: 0 },
 });
 
 /**
@@ -81,6 +83,14 @@ export class Wallet {
     this.onChange(this);
   }
 
+  /** ジャックポットに当たった */
+  recordJackpot(amount) {
+    const j = this.lifetime.jp;
+    j.wins += 1;
+    j.paid += amount;
+    this.onChange(this);
+  }
+
   /** スロットを1回まわした */
   recordSpin(res) {
     const s = this.lifetime.slot;
@@ -112,6 +122,7 @@ export class Wallet {
       lifetime: {
         ...this.lifetime,
         slot: { ...this.lifetime.slot, byId: { ...this.lifetime.slot.byId } },
+        jp: { ...this.lifetime.jp },
       },
       gameOver: this.gameOver,
     };
@@ -127,6 +138,8 @@ export class Wallet {
     this.best = Number.isFinite(data.best) ? data.best : CFG.wallet.start;
     this.lifetime = { ...zeroLifetime(), ...(data.lifetime || {}) };
     this.lifetime.slot = { spins: 0, wins: 0, byId: {}, ...(data.lifetime?.slot || {}) };
+    // 古いセーブには無いので既定で埋める (版は上げない。通算記録を捨てたくない)
+    this.lifetime.jp = { wins: 0, paid: 0, ...(data.lifetime?.jp || {}) };
 
     if (data.gameOver || !Number.isFinite(data.medals) || data.medals <= 0) {
       this.reset();               // 新しいゲームとして始める (lifetime.games も増える)

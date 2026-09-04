@@ -27,15 +27,21 @@ export class Hopper {
     this._acc += dt * rate;
 
     // fieldLimit で長く出せずにいると、場が流れないまま永久に残ってしまう。
-    // その場合は一時的に上限を無視する (プール上限までは出す)。
-    // 落ちてくるメダルが山を叩くこと自体が詰まり解消になる。
+    // その場合は上限を少しだけ緩める。落ちてくるメダルが山を叩くこと自体が詰まり解消になる。
+    //
+    // 【実測】ここで上限を「無視」してはいけない。
+    // ジャックポットの残り 340枚を吐かせたら場内が 581枚 (プール上限 585) まで埋まり、
+    // 1ステップが 28ms 相当まで伸びて 60fps を維持できなくなった。
+    // 逃げ道は要るが、逃げ道にも上限が要る。
     const blocked = this.pool.activeCount >= H.fieldLimit;
     this._stall = blocked ? this._stall + dt : 0;
-    const ignoreLimit = this._stall > H.stallRelease;
+    const limit = this._stall > H.stallRelease
+      ? H.fieldLimit + H.stallOverflow
+      : H.fieldLimit;
 
     while (this._acc >= 1 && this.pending > 0) {
       // 場内を詰まらせない。空くまで待つ
-      if (!ignoreLimit && this.pool.activeCount >= H.fieldLimit) break;
+      if (this.pool.activeCount >= limit) break;
       const x = (Math.random() - 0.5) * 2 * H.spreadX;
       const z = H.z + (Math.random() - 0.5) * 2 * H.spreadZ;
       if (!this.pool.spawn(x, H.y, z)) break;   // 満杯。次のフレームに回す

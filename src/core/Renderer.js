@@ -105,6 +105,9 @@ export class Stage {
 
   render() {
     this.controls.update();
+    // OrbitControls は update() のたびにカメラ位置を組み直すので、
+    // 揺らしたいものはこの後に入れないと打ち消される (台パンのカメラ揺れ)
+    if (this.onBeforeRender) this.onBeforeRender();
     this.renderer.render(this.scene, this.camera);
   }
 

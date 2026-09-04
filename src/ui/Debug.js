@@ -10,7 +10,8 @@ import { CFG } from '../config.js';
  * lil-gui からの実機調整は事実上必須。
  */
 export class Debug {
-  constructor({ scene, world, pool, stage, payout, slot, hopper, balls }) {
+  constructor({ scene, world, pool, stage, payout, slot, hopper, balls,
+                pusher, table, fever, jackpot, jpShow, special, bump, chute }) {
     this.world = world;
     this.pool = pool;
     this.stage = stage;
@@ -18,6 +19,14 @@ export class Debug {
     this.slot = slot;
     this.hopper = hopper;
     this.balls = balls;
+    this.pusher = pusher;
+    this.table = table;
+    this.fever = fever;
+    this.jackpot = jackpot;
+    this.jpShow = jpShow;
+    this.special = special;
+    this.bump = bump;
+    this.chute = chute;
     this.enabled = false;
 
     // --- Rapier のコライダー可視化 ---
@@ -81,6 +90,22 @@ export class Debug {
     fBall.add(CFG.ball, 'restitution', 0, 0.8, 0.01).name('反発').onChange(() => this.applyBall());
     fBall.add(CFG.ball, 'settleSeconds', 0, 4, 0.1).name('戻り後の静止時間 (秒)');
 
+    // --- ギミック (DESIGN_GIMMICKS.md) ---
+    const fGim = gui.addFolder('ギミック');
+    fGim.add(this, 'enterFever').name('フィーバー突入');
+    fGim.add(this, 'exitFever').name('フィーバー終了');
+    fGim.add(CFG.fever, 'seconds', 5, 90, 1).name('フィーバー時間 (秒)');
+    fGim.add(CFG.fever, 'strokeHalf', 0.5, 2.0, 0.05).name('F中の片振幅');
+    fGim.add(CFG.fever, 'period', 0.6, 3.0, 0.05).name('F中の周期');
+    fGim.add(CFG.fever, 'tableRx', -0.10, 0.12, 0.005).name('F中の傾き');
+    fGim.add(CFG.fever, 'stepsToEnter', 1, 8, 1).name('突入に必要なSTEP');
+    fGim.add(this, 'fireJackpot').name('ジャックポットを撃つ');
+    fGim.add(this, 'fillJackpot').name('JPを上限まで溜める');
+    fGim.add(CFG.jackpot, 'towerLimit', 20, 400, 10).name('タワーの上限枚数');
+    fGim.add(this, 'grantAll').name('特殊メダルを配る');
+    fGim.add(this, 'openFlippers').name('フリッパーを開く');
+    fGim.add(this, 'chuckerReport').name('チャッカーの入賞数をログ');
+
     const fTool = gui.addFolder('ツール');
     fTool.add(this, 'burst50').name('メダル50枚 投入');
     fTool.add(this, 'clearMedals').name('メダル全消去');
@@ -105,6 +130,51 @@ export class Debug {
   };
 
   returnBalls = () => this.balls && this.balls.respawnAll();
+
+  enterFever = () => this.fever && this.fever.enter();
+  exitFever = () => this.fever && this.fever.exit();
+
+  fireJackpot = () => {
+    if (!this.jackpot || !this.jpShow) return;
+    this.jpShow.start(this.jackpot.claim());
+  };
+
+  fillJackpot = () => {
+    if (!this.jackpot) return;
+    this.jackpot.amount = CFG.jackpot.max;
+    this.jackpot.onChange(this.jackpot);
+  };
+
+  grantAll = () => {
+    if (!this.special) return;
+    for (const k of ['gold', 'bomb', 'ticket']) this.special.grant(k, CFG.special.max);
+  };
+
+  openFlippers = () => this.chute && this.chute.triggerFlippers();
+
+  /**
+   * チャッカーの実測用。
+   * DESIGN_GIMMICKS.md §8-1「入賞率は切り欠きの幅にほぼ比例するか」を確かめる。
+   * 幅の比と入賞数の比がずれるなら、山の流れが一様でないということ
+   */
+  chuckerReport = () => {
+    if (!this.payout) return;
+    const total = this.payout.credit + this.payout.chucker;
+    const rows = CFG.chute.slots.map((s) => {
+      const n = this.payout.chuckerById[s.id] || 0;
+      const w = s.x1 - s.x0;
+      return {
+        id: s.id,
+        幅: w.toFixed(2),
+        奥行: (s.dz1 - s.dz0).toFixed(2),
+        入賞: n,
+        '実測%': total ? ((n / total) * 100).toFixed(1) : '0.0',
+        '幅比%': ((w / CFG.chute.box.w) * 100).toFixed(1),
+      };
+    });
+    console.table(rows);
+    console.log(`払い出し ${this.payout.credit} / チャッカー ${this.payout.chucker} / ロスト ${this.payout.lost}`);
+  };
 
   applyBall = () => this.balls && this.balls.applyMaterial();
 

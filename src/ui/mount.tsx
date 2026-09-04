@@ -9,6 +9,10 @@ export type MountOptions = {
   onRestart: () => void;
   /** ゲームオーバー画面の「記録を消す」 */
   onClearData: () => void;
+  /** 特殊メダルを選ぶ (キーボードの 1/2/3 と同じ操作) */
+  onSelectSpecial?: (kind: string) => void;
+  /** 台パン (キーボードの B と同じ操作) */
+  onBump?: () => void;
 };
 
 export type UIHandle = {
@@ -30,9 +34,16 @@ export type UIHandle = {
  */
 export function mountUI(container: HTMLElement, options: MountOptions): UIHandle {
   const root: Root = createRoot(container);
+  const noop = () => {};
+  const props = {
+    onRestart: options.onRestart,
+    onClearData: options.onClearData,
+    onSelectSpecial: options.onSelectSpecial ?? noop,
+    onBump: options.onBump ?? noop,
+  };
   root.render(
     <StrictMode>
-      <App onRestart={options.onRestart} onClearData={options.onClearData} />
+      <App {...props} />
     </StrictMode>
   );
 
@@ -48,7 +59,7 @@ export function mountUI(container: HTMLElement, options: MountOptions): UIHandle
     fail: (message) => {
       root.render(
         <StrictMode>
-          <App error={message} onRestart={options.onRestart} onClearData={options.onClearData} />
+          <App error={message} {...props} />
         </StrictMode>
       );
     },
