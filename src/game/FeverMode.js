@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const F = CFG.fever;
 const L = CFG.layout;
@@ -115,9 +116,9 @@ export class FeverMode {
         this._refill -= 1;
         const H = CFG.hopper;
         if (!this.pool.spawn(
-          (Math.random() - 0.5) * 2 * H.spreadX,
+          (rnd() - 0.5) * 2 * H.spreadX,
           H.y,
-          H.z + (Math.random() - 0.5) * 2 * H.spreadZ
+          H.z + (rnd() - 0.5) * 2 * H.spreadZ
         )) break;
       }
     } else {

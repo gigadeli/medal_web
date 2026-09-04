@@ -6,7 +6,8 @@
 > 実装で覆った箇所には「実測」と明記しています。
 >
 > **ギミック（チャッカー／フィーバー／ジャックポット／特殊メダルなど）は
-> [DESIGN_GIMMICKS.md](DESIGN_GIMMICKS.md) に分けてあります。**
+> [DESIGN_GIMMICKS.md](DESIGN_GIMMICKS.md) に、
+> チート対策とセキュリティは [DESIGN_SECURITY.md](DESIGN_SECURITY.md) に分けてあります。**
 > 本書は「メダルが押し出されて落ちる」という土台の話に限ります。
 
 ---

@@ -23,13 +23,22 @@ import { AntiJam } from './game/AntiJam.js';
 import { Wallet } from './game/Wallet.js';
 import { SaveStore } from './save/SaveStore.js';
 import { Sound } from './audio/Sound.js';
-import { Debug } from './ui/Debug.js';
 import { mountUI } from './ui/mount';
+import { rnd } from './core/Rng.js';
 
 /** 計測値を UI に流す間隔 (秒)。毎フレーム流すと React が 60fps で回ってしまう */
 const STATS_INTERVAL = 0.25;
 /** 獲得ポップの最短間隔 (秒)。大量払い出しで打ち続けないように */
 const GAIN_POP_INTERVAL = 0.12;
+
+/** 本番ビルドではデバッグパネルを積まないので、呼び出し側の分岐を無くすための空実装 */
+const NOOP_DEBUG = { beginFrame() {}, endFrame() {} };
+
+/** セーブから読んだ数値を範囲に押し込む。壊れていれば fallback */
+function clampInt(v, fallback, min, max) {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  return Math.max(min, Math.min(max, Math.floor(v)));
+}
 
 /**
  * 起動シーケンス。
@@ -52,9 +61,9 @@ async function main() {
   const saved = SaveStore.load();
   // 「記録を消す」で振り直すので const ではない
   let userId = (saved && saved.userId) || SaveStore.newUserId();
-  const fieldStock = Math.min(
-    (saved && Number.isFinite(saved.fieldStock)) ? saved.fieldStock : CFG.save.defaultFieldStock,
-    CFG.medal.maxCount
+  // セーブの数値はプレイヤーが書き換えられる。範囲に押し込んでから使う
+  const fieldStock = clampInt(
+    (saved && saved.fieldStock), CFG.save.defaultFieldStock, 0, CFG.medal.maxCount
   );
   if (saved && saved.settings) sound.setMuted(!!saved.settings.muted);
 
@@ -202,7 +211,7 @@ async function main() {
       // フィーバーを抜けたらボムを1枚。次の詰まりを自分で崩せる
       onExit: () => special.grant('bomb'),
     });
-    if (saved && Number.isFinite(saved.steps)) fever.steps = saved.steps;
+    fever.steps = clampInt(saved && saved.steps, 0, 0, CFG.fever.stepsToEnter - 1);
     fever.onChange(fever);
 
     let lastGainPop = -1;
@@ -250,10 +259,19 @@ async function main() {
       }
     );
 
-    const debug = new Debug({
-      scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
-      pusher, table, fever, jackpot, jpShow, special, bump, chute,
-    });
+    // デバッグパネルは開発ビルドにしか積まない。
+    // 本番に残すと D キーで「ジャックポットを撃つ」「この絵柄でまわす」が
+    // そのまま押せてしまう (実測: dist のバンドルに全部入っていた)。
+    // import.meta.env.DEV は本番で定数 false になるので、
+    // この分岐ごと消えて lil-gui / stats.js もバンドルから落ちる
+    let debug = NOOP_DEBUG;
+    if (import.meta.env.DEV) {
+      const { Debug } = await import('./ui/Debug.js');
+      debug = new Debug({
+        scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
+        pusher, table, fever, jackpot, jpShow, special, bump, chute,
+      });
+    }
 
     prefill(pool, fieldStock);
     currentFieldStock = () => pool.activeCount;
@@ -369,12 +387,15 @@ async function main() {
       requestAnimationFrame(() => ui.setGame({ loading: false }))
     );
 
-    // コンソールから触れるように
-    window.game = {
-      CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
-      dispenser, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
-      wallet, ui, fever, jackpot, jpShow, bump, special,
-    };
+    // コンソールから触れるように。開発ビルドだけ。
+    // ここを本番に残すと game.wallet.medals = 1e9 の一行で終わってしまう
+    if (import.meta.env.DEV) {
+      window.game = {
+        CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
+        dispenser, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
+        wallet, ui, fever, jackpot, jpShow, bump, special,
+      };
+    }
   } catch (err) {
     console.error(err);
     ui.fail(err && err.message ? err.message : String(err));
@@ -407,9 +428,9 @@ function prefill(pool, count = CFG.save.defaultFieldStock) {
       for (let ix = 0; ix < cols && placed < want; ix++) {
         for (let iz = 0; iz < rows && placed < want; iz++) {
           if (!pool.spawn(
-            x0 + ix * dx + (Math.random() - 0.5) * 0.6,
-            y0 + l * (t + 0.09) + Math.random() * 0.04,
-            z0 + iz * dz + (Math.random() - 0.5) * 0.5
+            x0 + ix * dx + (rnd() - 0.5) * 0.6,
+            y0 + l * (t + 0.09) + rnd() * 0.04,
+            z0 + iz * dz + (rnd() - 0.5) * 0.5
           )) return placed;
           placed++;
         }

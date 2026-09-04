@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 /**
  * WebAudio で効果音をその場で合成する。音声ファイルは使わない。
@@ -69,7 +70,7 @@ export class Sound {
     const n = Math.floor(this.ctx.sampleRate * seconds);
     const buf = this.ctx.createBuffer(1, n, this.ctx.sampleRate);
     const d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    for (let i = 0; i < n; i++) d[i] = rnd() * 2 - 1;
     return buf;
   }
 
@@ -99,11 +100,11 @@ export class Sound {
     // --- アタック: 帯域を絞ったノイズ ---
     const src = this.ctx.createBufferSource();
     src.buffer = this._noise;
-    src.playbackRate.value = 0.8 + Math.random() * 0.5;
+    src.playbackRate.value = 0.8 + rnd() * 0.5;
 
     const bp = this.ctx.createBiquadFilter();
     bp.type = 'bandpass';
-    bp.frequency.value = 2600 + k * 3400 + Math.random() * 900;
+    bp.frequency.value = 2600 + k * 3400 + rnd() * 900;
     bp.Q.value = 1.6;
 
     const g = this.ctx.createGain();
@@ -115,7 +116,7 @@ export class Sound {
     src.stop(t + decay + 0.02);
 
     // --- 余韻: 金属的な倍音を2本 ---
-    const base = 2900 + Math.random() * 1500;
+    const base = 2900 + rnd() * 1500;
     for (const [mult, amp] of [[1, 0.5], [2.41, 0.28]]) {
       const o = this.ctx.createOscillator();
       o.type = 'triangle';
@@ -153,7 +154,7 @@ export class Sound {
     const t = this.ctx.currentTime;
     if (t - (this._lastPayout || 0) < 0.05) return;
     this._lastPayout = t;
-    this._tone(1750 + Math.random() * 250, 0.07, 'square', 0.055);
+    this._tone(1750 + rnd() * 250, 0.07, 'square', 0.055);
   }
 
   /** チャッカー通過 */

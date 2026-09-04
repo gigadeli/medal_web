@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 /**
  * スロットの抽選。
@@ -81,7 +82,7 @@ export class SlotMachine {
       index = this.force;
       this.force = null;
     } else {
-      let r = Math.random() * this._total;
+      let r = rnd() * this._total;
       index = CFG.slot.symbols.length - 1;
       for (let i = 0; i < CFG.slot.symbols.length; i++) {
         r -= CFG.slot.symbols[i].weight;

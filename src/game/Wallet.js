@@ -1,5 +1,24 @@
 import { CFG } from '../config.js';
 
+/**
+ * セーブから「非負整数」として読む。
+ *
+ * localStorage の中身はプレイヤーが自由に書き換えられる。実測で
+ * `restore({ medals: 999999999 })` も `{ earned: -5 }` もそのまま通っていた。
+ * 完全にクライアントで動くゲームなので改竄そのものは防げないが、
+ * **壊れた値をゲームの内部状態に入れない**ことはできる。
+ * 破損したセーブでゲームが変な状態になるのを防ぐ効果のほうが実は大きい。
+ *
+ * 方針は「捨てずに直す」。厳しく弾くと、こちらのバグや仕様変更で
+ * 正直なプレイヤーの記録まで消してしまう。
+ */
+const uint = (v, fallback = 0, max = CFG.wallet.sanityMax) => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
+  const n = Math.floor(v);
+  if (n < 0) return fallback;
+  return n > max ? max : n;
+};
+
 const zeroRun = () => ({ inserted: 0, earned: 0, lost: 0 });
 const zeroLifetime = () => ({
   inserted: 0, earned: 0, lost: 0, games: 0,
@@ -134,21 +153,62 @@ export class Wallet {
    * 通算と最高記録だけ引き継いで、持ち枚数と今回ぶんは新規にする (§11.5)。
    */
   restore(data) {
-    if (!data) return;
-    this.best = Number.isFinite(data.best) ? data.best : CFG.wallet.start;
-    this.lifetime = { ...zeroLifetime(), ...(data.lifetime || {}) };
-    this.lifetime.slot = { spins: 0, wins: 0, byId: {}, ...(data.lifetime?.slot || {}) };
-    // 古いセーブには無いので既定で埋める (版は上げない。通算記録を捨てたくない)
-    this.lifetime.jp = { wins: 0, paid: 0, ...(data.lifetime?.jp || {}) };
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return;
+
+    const src = data.lifetime && typeof data.lifetime === 'object' ? data.lifetime : {};
+    const srcSlot = src.slot && typeof src.slot === 'object' ? src.slot : {};
+    const srcJp = src.jp && typeof src.jp === 'object' ? src.jp : {};
+
+    this.lifetime = {
+      inserted: uint(src.inserted),
+      earned: uint(src.earned),
+      lost: uint(src.lost),
+      games: uint(src.games),
+      slot: {
+        spins: uint(srcSlot.spins),
+        wins: uint(srcSlot.wins),
+        // byId は絵柄ごとの回数。知らないキーは捨てる。
+        // 素通しにすると、セーブ経由で任意のキーを生やされる
+        byId: Wallet._byId(srcSlot.byId),
+      },
+      // 古いセーブには無いので既定で埋める (版は上げない。通算記録を捨てたくない)
+      jp: { wins: uint(srcJp.wins), paid: uint(srcJp.paid) },
+    };
+    // 当たった回数が回した回数を超えることはない
+    if (this.lifetime.slot.wins > this.lifetime.slot.spins) {
+      this.lifetime.slot.wins = this.lifetime.slot.spins;
+    }
+
+    this.best = uint(data.best, CFG.wallet.start);
 
     if (data.gameOver || !Number.isFinite(data.medals) || data.medals <= 0) {
       this.reset();               // 新しいゲームとして始める (lifetime.games も増える)
       return;
     }
-    this.medals = data.medals;
-    this.run = { ...zeroRun(), ...(data.run || {}) };
+    this.medals = uint(data.medals, CFG.wallet.start);
+    const run = data.run && typeof data.run === 'object' ? data.run : {};
+    this.run = {
+      inserted: uint(run.inserted),
+      earned: uint(run.earned),
+      lost: uint(run.lost),
+    };
+    // best は「最高持ち枚数」なので、いまの持ち枚数を下回ることはない。
+    // 矛盾していたら捨てずに引き上げる
+    if (this.best < this.medals) this.best = this.medals;
+
     this.gameOver = false;
     this._empty = 0;
     this.onChange(this);
+  }
+
+  /** 絵柄ごとの回数。config に無いキーは黙って捨てる */
+  static _byId(src) {
+    const out = {};
+    if (!src || typeof src !== 'object') return out;
+    for (const sym of CFG.slot.symbols) {
+      const n = uint(src[sym.id]);
+      if (n > 0) out[sym.id] = n;
+    }
+    return out;
   }
 }

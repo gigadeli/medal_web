@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const S = CFG.special;
 
@@ -126,7 +127,7 @@ export class SpecialMedals {
       // 近いほど強く、前と上に押す。AntiJam の全体版と同じ発想
       const k = def.impulse * (1 - Math.sqrt(d2) / def.radius);
       o.body.wakeUp();
-      o.body.applyImpulse({ x: dx * 0.25 * k, y: k * 0.6, z: k * (0.6 + Math.random() * 0.5) }, true);
+      o.body.applyImpulse({ x: dx * 0.25 * k, y: k * 0.6, z: k * (0.6 + rnd() * 0.5) }, true);
       n++;
     }
     // ボム自身は通常メダルに戻す (色も戻る)。消すと持ち枚数が合わなくなる
@@ -140,15 +141,21 @@ export class SpecialMedals {
   }
 
   restore(data) {
-    if (!data) return;
-    if (data.stock) {
-      for (const k of KINDS) {
-        if (Number.isFinite(data.stock[k])) {
-          this.stock[k] = Math.max(0, Math.min(S.max, data.stock[k]));
-        }
-      }
+    if (!data || typeof data !== 'object') return;
+    const stock = data.stock && typeof data.stock === 'object' ? data.stock : {};
+    for (const k of KINDS) {
+      const v = stock[k];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      this.stock[k] = Math.max(0, Math.min(S.max, Math.floor(v)));
     }
-    if (Number.isFinite(data.lostAccum)) this.lostAccum = data.lostAccum;
+    // lostAccum は必ず [0, lostPerTicket) に収めること。
+    // ここを素通しにすると、セーブに巨大な値を入れられたとき
+    // 次の onLost() の while ループが数千万回まわってゲームが固まる
+    // (改竄というより、セーブ経由でフリーズさせられる穴だった)
+    const acc = data.lostAccum;
+    this.lostAccum = (typeof acc === 'number' && Number.isFinite(acc) && acc > 0)
+      ? Math.min(Math.floor(acc), S.lostPerTicket - 1)
+      : 0;
     this.onChange(this);
   }
 

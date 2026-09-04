@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const L = CFG.layout;
 const M = CFG.medal;
@@ -162,9 +163,9 @@ export class MedalPool {
     // タワーを積むときだけは水平に置く (重なった姿勢で生成すると弾け飛ぶ)
     const jitter = opts && opts.flat ? 0 : 0.35;
     _euler.set(
-      (Math.random() - 0.5) * jitter,
-      Math.random() * Math.PI * 2,
-      (Math.random() - 0.5) * jitter
+      (rnd() - 0.5) * jitter,
+      rnd() * Math.PI * 2,
+      (rnd() - 0.5) * jitter
     );
     _quat.setFromEuler(_euler);
     m.body.setRotation({ x: _quat.x, y: _quat.y, z: _quat.z, w: _quat.w }, true);
@@ -172,9 +173,9 @@ export class MedalPool {
     m.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     const spin = opts && opts.flat ? 0 : 1;
     m.body.setAngvel({
-      x: (Math.random() - 0.5) * 2 * spin,
-      y: (Math.random() - 0.5) * 6,
-      z: (Math.random() - 0.5) * 2 * spin,
+      x: (rnd() - 0.5) * 2 * spin,
+      y: (rnd() - 0.5) * 6,
+      z: (rnd() - 0.5) * 2 * spin,
     }, true);
     m.body.wakeUp();
     m.counted = false;

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const B = CFG.ball;
 const L = CFG.layout;
@@ -68,7 +69,7 @@ export class LotteryBall {
   _homeX() {
     const n = Math.max(1, B.count);
     const slot = n === 1 ? 0 : (this.index / (n - 1)) * 2 - 1;   // -1 .. +1
-    return slot * B.spawnXRange * 0.75 + (Math.random() - 0.5) * 1.2;
+    return slot * B.spawnXRange * 0.75 + (rnd() - 0.5) * 1.2;
   }
 
   respawn() {
@@ -153,7 +154,7 @@ export class LotteryBall {
         this._stuck = 0;
         this.nudges++;
         this.body.applyImpulse({
-          x: (Math.random() - 0.5) * B.stuckNudge,
+          x: (rnd() - 0.5) * B.stuckNudge,
           y: B.stuckNudge * 0.5,
           z: B.stuckNudge,
         }, true);

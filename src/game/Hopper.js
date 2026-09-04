@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 /**
  * ホッパー: 当たり分のメダルをまとめて降らせる装置。
@@ -42,8 +43,8 @@ export class Hopper {
     while (this._acc >= 1 && this.pending > 0) {
       // 場内を詰まらせない。空くまで待つ
       if (this.pool.activeCount >= limit) break;
-      const x = (Math.random() - 0.5) * 2 * H.spreadX;
-      const z = H.z + (Math.random() - 0.5) * 2 * H.spreadZ;
+      const x = (rnd() - 0.5) * 2 * H.spreadX;
+      const z = H.z + (rnd() - 0.5) * 2 * H.spreadZ;
       if (!this.pool.spawn(x, H.y, z)) break;   // 満杯。次のフレームに回す
       this.pending--;
       this.released++;

@@ -539,6 +539,9 @@ export const CFG = {
    */
   wallet: {
     start: 300,
+    // 壊れた/改竄されたセーブを弾くための上限。**ゲームのルールではない**。
+    // 正常なプレイでここに届くことは無い数字にしておく
+    sanityMax: 9999999,
     // 0枚になっても、場に残っているメダルがまだ落ちてくる可能性がある。
     // すぐ終了にすると理不尽なので、この秒数まったく増えなければ終了とする
     gameOverDelay: 8.0,
@@ -567,3 +570,27 @@ export const CFG = {
     fov: 38,
   },
 };
+
+/**
+ * 本番ビルドでは CFG を凍結する。
+ *
+ * 凍結しないと `CFG.pusher.strokeHalf = 2` の一行で払い出しが蛇口になる。
+ * 実測で書き換え可能なことを確認済み。
+ *
+ * 開発ビルドでは凍結しない。デバッグパネル (lil-gui) が CFG を直接書き換えて
+ * パラメータを詰める作りになっているため (DESIGN.md §5)。
+ * 本番コードで CFG に代入している箇所は無いので、凍結しても壊れない
+ * (Debug.js 以外に代入が無いことを grep で確認済み)。
+ *
+ * これも「防御」ではない。バンドルを書き換えれば無効化できる。
+ * コンソールから1行、という手軽さを潰すだけのもの。
+ */
+function deepFreeze(o) {
+  for (const k of Object.getOwnPropertyNames(o)) {
+    const v = o[k];
+    if (v && typeof v === 'object' && !Object.isFrozen(v)) deepFreeze(v);
+  }
+  return Object.freeze(o);
+}
+
+if (!import.meta.env.DEV) deepFreeze(CFG);

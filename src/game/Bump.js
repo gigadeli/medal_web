@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const B = CFG.bump;
 
@@ -60,9 +61,9 @@ export class Bump {
     for (const m of this.pool.active) {
       m.body.wakeUp();
       m.body.applyImpulse({
-        x: (Math.random() - 0.5) * B.impulse * 0.5,
-        y: B.impulse * (0.5 + Math.random() * 0.5),
-        z: B.impulse * (0.4 + Math.random() * 0.5),
+        x: (rnd() - 0.5) * B.impulse * 0.5,
+        y: B.impulse * (0.5 + rnd() * 0.5),
+        z: B.impulse * (0.4 + rnd() * 0.5),
       }, true);
     }
     this.sound.bump();
@@ -91,8 +92,8 @@ export class Bump {
     if (this.shake <= 0) return;
     this.shake = Math.max(0, this.shake - dt * 1.4);
     const k = this.shake;
-    this.stage.camera.position.x += (Math.random() - 0.5) * k;
-    this.stage.camera.position.y += (Math.random() - 0.5) * k;
+    this.stage.camera.position.x += (rnd() - 0.5) * k;
+    this.stage.camera.position.y += (rnd() - 0.5) * k;
   }
 
   dispose() {

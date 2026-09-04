@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,7 +28,7 @@ function tierOf(res) {
 function pickWeighted(weights) {
   let total = 0;
   for (const w of weights) total += w;
-  let r = Math.random() * total;
+  let r = rnd() * total;
   for (let i = 0; i < weights.length; i++) {
     r -= weights[i];
     if (r <= 0) return i;
@@ -432,7 +433,7 @@ export class SlotDisplay {
       if (this._spinTimer >= 0.055) {
         this._spinTimer = 0;
         for (let i = 0; i < 3; i++) {
-          if (s.spinning[i]) s.symbols[i] = (Math.random() * SYMBOLS.length) | 0;
+          if (s.spinning[i]) s.symbols[i] = (rnd() * SYMBOLS.length) | 0;
         }
         this._dirty = true;
       }
@@ -478,9 +479,9 @@ export class SlotDisplay {
   _figures(res) {
     if (res.win) return { symbols: [res.index, res.index, res.index], reach: true, tease: res.index };
     const n = SYMBOLS.length;
-    const pick = () => (Math.random() * n) | 0;
+    const pick = () => (rnd() * n) | 0;
     const a = pick();
-    if (Math.random() < 0.55) {
+    if (rnd() < 0.55) {
       let c = pick();
       while (c === a) c = pick();
       return { symbols: [a, a, c], reach: true, tease: a };   // リーチをかけて外す
@@ -503,7 +504,7 @@ export class SlotDisplay {
     const s = this.state;
     for (let i = 1; i <= times; i++) {
       const n = SYMBOLS.length;
-      const chance = (Math.random() * n) | 0;
+      const chance = (rnd() * n) | 0;
       s.symbols = [chance, chance, chance];
       s.spinning = [false, false, false];
       s.pseudo = i;

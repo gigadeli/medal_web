@@ -1,4 +1,5 @@
 import { CFG } from '../config.js';
+import { rnd } from '../core/Rng.js';
 
 /**
  * 詰まり解除。
@@ -44,9 +45,9 @@ export class AntiJam {
       if (m.currP.y < 0.8 && m.currP.z > frontZ - 0.5) {
         m.body.wakeUp();
         m.body.applyImpulse({
-          x: (Math.random() - 0.5) * A.impulse * 0.4,
+          x: (rnd() - 0.5) * A.impulse * 0.4,
           y: 0,
-          z: A.impulse * (0.7 + Math.random() * 0.6),
+          z: A.impulse * (0.7 + rnd() * 0.6),
         }, true);
         n++;
       }
