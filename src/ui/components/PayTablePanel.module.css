@@ -1,30 +1,65 @@
+/*
+ * 3x3 化で液晶パネルの背が伸びたぶん、配当表は画面上部の中央から
+ * 右の縦帯へ移した。上部中央は液晶（盤面そのもの）に譲る。
+ * 配当表は「見に行く情報」で、動いている盤面より優先度が低い
+ *
+ * ─────────────────────────────────────────────────────────────
+ * 【実測】縦に積む以上、画面の高さに依存する
+ *
+ * 上は STATS パネル (16..99)、下は操作説明バー (画面下端から 62px) に挟まれる。
+ * 使える帯は「99 〜 画面高-62」しかない。
+ *
+ *   通常時の中身は 284px。top:112 から 396 まで。
+ *   → 画面高 470px を下回ると下端が操作説明バーに潜り込む。
+ *     900x430 で実測したときは 青7(JP) 行と保留ランプが完全に隠れた。
+ *
+ * 保留ランプは「いま何回ぶん抽選が溜まっているか」という機能情報なので、
+ * 隠れると判断材料が消える。低い画面では下の @media で全体を詰める。
+ * ─────────────────────────────────────────────────────────────
+ */
 .panel {
-  top: 16px; left: 50%; transform: translateX(-50%);
+  top: 112px; right: 16px;
+  width: 112px;
+  padding: 8px 10px 9px;
   text-align: center;
-  padding: 9px 14px 10px;
 }
-.label { font-size: 10px; letter-spacing: .3em; color: var(--dim); margin-bottom: 7px; }
+.label { font-size: 10px; letter-spacing: .22em; color: var(--dim); }
+/* 表の枚数が「1ラインあたり」であることの断り (DESIGN_GIMMICKS.md §3.10) */
+.perLine {
+  display: block; margin-top: 2px;
+  font-size: 8px; font-weight: 600;
+  color: var(--dim); opacity: .75; letter-spacing: .14em;
+}
 /* 保留が溢れて乗った倍率 (DESIGN_GIMMICKS.md §3.2) */
 .odds {
-  margin-left: 8px; padding: 1px 6px;
-  border-radius: 999px; letter-spacing: 0;
+  display: inline-block; margin-top: 4px; padding: 1px 7px;
+  border-radius: 999px; letter-spacing: 0; font-size: 11px;
   color: #ff9f4d; background: rgba(255, 159, 77, .14);
   border: 1px solid rgba(255, 159, 77, .5);
 }
 .jp { color: var(--cyan); font-weight: 700; letter-spacing: .06em; }
 
-.rows { display: flex; gap: 6px; align-items: stretch; }
+/* 有効ラインの早見図 */
+.lineMap {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin: 6px 0 5px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(140, 165, 210, .18);
+}
+.lineMap svg { width: 34px; height: 34px; }
+.lineCount { font-size: 9px; letter-spacing: .08em; color: var(--dim); }
+
+.rows { display: flex; flex-direction: column; gap: 2px; }
 .cell {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  min-width: 42px; padding: 4px 5px 5px;
-  border-radius: 7px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 1px 5px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, .03);
   border: 1px solid transparent;
 }
-.glyph { font-size: 17px; line-height: 1.1; font-weight: 700; }
-.bar { font-size: 11px; letter-spacing: .04em; }
+.cell svg { width: 18px; height: 18px; }
 .pay {
-  font-size: 10px; color: var(--dim);
+  font-size: 11px; color: var(--dim); font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -48,3 +83,34 @@
   transition: background .15s ease, box-shadow .15s ease;
 }
 .lit { background: var(--cyan); box-shadow: 0 0 8px rgba(92, 200, 255, .9); }
+
+/*
+ * 低い画面用に2段。数字はすべて実測 (パネル下端と操作説明バー上端の間隔)。
+ *
+ *   画面高 720px … 通常  112..396 / バー 658  → 余白 262px
+ *   画面高 430px … 段1   100..340 / バー 368  → 余白  28px
+ *   画面高 390px … 段2   100..314 / バー 328  → 余白  14px
+ *
+ * 段1は情報をひとつも落とさず詰めるだけ。
+ * 段2でだけ早見図を落とす。「5 LINES」の文字と保留ランプは最後まで残す
+ * ―― 保留ランプは「いま何回ぶん抽選が溜まっているか」という機能情報で、
+ * 隠れると判断材料が消えるため。
+ */
+@media (max-height: 560px) {
+  .panel { top: 100px; width: 104px; padding: 6px 8px 7px; }
+  .lineMap { margin: 4px 0 4px; padding-bottom: 4px; }
+  .lineMap svg { width: 26px; height: 26px; }
+  .lineCount { font-size: 8px; }
+  .cell { padding: 0 4px; gap: 4px; }
+  .cell svg { width: 16px; height: 16px; }
+  .pay { font-size: 10px; }
+  .hold { margin-top: 6px; gap: 6px; }
+  .lamp { width: 8px; height: 8px; }
+}
+
+@media (max-height: 420px) {
+  .lineMap svg { display: none; }
+  .lineMap { margin: 3px 0; padding-bottom: 3px; }
+  .rows { gap: 1px; }
+  .hold { margin-top: 4px; }
+}

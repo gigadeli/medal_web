@@ -1,12 +1,18 @@
 import { CFG } from '../config.js';
 import { rnd } from '../core/Rng.js';
+import { pickLineCount } from './SlotLines.js';
 
 /**
  * スロットの抽選。
  *
  * 絵柄は8種類で、weight による重み付き抽選で「どの絵柄で止まるか」を先に決める。
- * ブランク以外が出れば3列揃い（アタリ）で、その絵柄の pay 枚数をホッパーに渡す。
+ * ブランク以外が出ればアタリで、その絵柄の pay 枚数をホッパーに渡す。
  * 青7だけは枚数を持たず、ジャックポット当選として上位へ渡す。
+ *
+ * 盤面が 3列 x 3段 になり、5本のペイラインを見るようになったので、
+ * 「何本で揃うか」もここで引く (DESIGN_GIMMICKS.md §3.10)。
+ * 払い出しは pay x ライン数 x 倍率。盤面そのものは SlotLines.buildGrid が
+ * この結果から逆算して組むので、画面に出る当たりと払い出しは必ず一致する。
  *
  * 演出（リールの回転と停止）は present() に委ねてあり、ここは結果だけを決める。
  *
@@ -92,8 +98,10 @@ export class SlotMachine {
     const symbol = CFG.slot.symbols[index];
     const odds = this.odds;
     const jp = !!symbol.jp;
+    // 揃うライン数。ジャックポットは額が累積値なので本数を増やす意味がない
+    const lines = jp ? 1 : symbol.pay > 0 ? pickLineCount(symbol.tier) : 0;
     // 倍率は枚数にだけ掛ける。ジャックポットは累積額そのものなので掛けない
-    const amount = symbol.pay * odds;
+    const amount = symbol.pay * lines * odds;
     const win = jp || amount > 0;
 
     this.stats.spins++;
@@ -103,7 +111,7 @@ export class SlotMachine {
     }
     this.stats.byId[symbol.id] = (this.stats.byId[symbol.id] || 0) + 1;
 
-    const result = { index, symbol, amount, win, jp, odds };
+    const result = { index, symbol, amount, win, jp, odds, lines };
     this.onDraw(result);
     return result;
   }

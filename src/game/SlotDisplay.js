@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
 import { rnd } from '../core/Rng.js';
+import { drawSymbol } from '../render/SymbolArt.js';
+import { LINES, buildGrid, tierOf } from './SlotLines.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -11,18 +13,21 @@ const SHOW = CFG.slot.show;
 const TEX_W = 1024;
 const TEX_H = Math.round(TEX_W * (D.height / D.width));
 
-/** 絵柄と文字が両方出るフォント指定 */
-const FONT = '"Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI", system-ui, sans-serif';
+const FONT = '"Segoe UI", system-ui, sans-serif';
 
-/** 役の格。heat の重みを選ぶのに使う (DESIGN_GIMMICKS.md §3.9) */
-function tierOf(res) {
-  if (res.jp) return 'jp';
-  if (!res.win) return 'miss';
-  const id = res.symbol.id;
-  if (id === 'bar' || id === 'red7') return 'big';
-  if (id === 'bell' || id === 'melon') return 'mid';
-  return 'small';
-}
+/* --- 盤面の寸法。すべてテクスチャのピクセル --- */
+const CELL = 122;
+const GAP = 9;
+const GRID_W = CELL * 3 + GAP * 2;
+const GRID_H = GRID_W;
+const GRID_X = (TEX_W - GRID_W) / 2;
+const GRID_Y = 50;
+const SYM = 96;                       // 1マスに描く絵柄の大きさ
+
+const cellX = (c) => GRID_X + c * (CELL + GAP);
+const cellY = (r) => GRID_Y + r * (CELL + GAP);
+const cellCX = (c) => cellX(c) + CELL / 2;
+const cellCY = (r) => cellY(r) + CELL / 2;
 
 /** 重み付き抽選 */
 function pickWeighted(weights) {
@@ -36,6 +41,9 @@ function pickWeighted(weights) {
   return weights.length - 1;
 }
 
+const randSym = () => (rnd() * SYMBOLS.length) | 0;
+const randCol = () => [randSym(), randSym(), randSym()];
+
 /**
  * スロットの表示装置。
  *
@@ -46,6 +54,16 @@ function pickWeighted(weights) {
  * 変化があるときだけ描き直す（`_dirty` フラグ）。
  *
  * 進行役も兼ねていて、SlotMachine からは play(res) を await するだけでよい。
+ *
+ * ─────────────────────────────────────────────────────────────
+ * 盤面は 3列 x 3段、ペイラインは5本 (DESIGN_GIMMICKS.md §3.10)
+ *
+ * リールは縦に回るので、状態も cols[列][段] で持つ。1列止めると3マスが
+ * 同時に確定するぶん、リーチの掛かり方が1ライン時代より賑やかになる。
+ *
+ * 絵柄は SVG のパス (render/SymbolArt.js) を Path2D にして描いている。
+ * 同じデータを HUD の配当表も読むので、液晶とHUDで絵が食い違わない。
+ * ─────────────────────────────────────────────────────────────
  *
  * ─────────────────────────────────────────────────────────────
  * 演出の骨格 (DESIGN_GIMMICKS.md §3.9)
@@ -78,9 +96,11 @@ export class SlotDisplay {
     this.state = {
       playing: false,
       label: 'READY',
-      symbols: [7, 6, 5],      // 止まっている絵柄 (SYMBOLS のインデックス)
+      cols: [randCol(), randCol(), randCol()],   // 止まっている盤面 [列][段]
       spinning: [false, false, false],
       reach: false,
+      winLines: [],            // 揃ったペイライン番号
+      winSymbol: -1,
       result: '',
       tone: 'idle',            // 'idle' | 'miss' | 'win' | 'big'
       // --- 演出 ---
@@ -89,8 +109,8 @@ export class SlotDisplay {
       cutIn: 0,                // 0..1。カットインの帯の進み
       cutInLabel: '',
       freeze: 0,               // 0..1。フリーズの白フラッシュ
-      slip: 0,                 // 0..1。第3リールの滑り
-      slipFrom: 0,             // 滑る前に見せる絵柄
+      slip: 0,                 // 1..0。第3リールの滑り (1コマぶん)
+      slipStrip: null,         // 滑っている最中のリール帯 4コマ [新, T0, T1, T2]
       pseudo: 0,               // 擬似連の回数表示 (0 なら出さない)
     };
     // 常時表示のメーター類
@@ -105,6 +125,7 @@ export class SlotDisplay {
       tilt: 0,
     };
     this._spinTimer = 0;
+    this._blinkTimer = 0;
     this._dirty = true;
     this._blink = 0;
 
@@ -177,14 +198,16 @@ export class SlotDisplay {
     c.closePath();
   }
 
+  /** #rrggbb に不透明度を足す */
+  _alphaHex(hex, a) {
+    const v = Math.round(Math.max(0, Math.min(1, a)) * 255);
+    return hex + v.toString(16).padStart(2, '0');
+  }
+
   /** 絵柄を1つ描く */
-  _glyph(sym, cx, cy, alpha = 1) {
-    const c = this.ctx;
-    c.fillStyle = sym.color;
-    c.globalAlpha = alpha;
-    c.font = sym.glyph.length > 1 ? `700 56px ${FONT}` : `700 100px ${FONT}`;
-    c.fillText(sym.glyph, cx, cy);
-    c.globalAlpha = 1;
+  _sym(index, cx, cy, alpha = 1) {
+    const s = SYMBOLS[index] || SYMBOLS[0];
+    drawSymbol(this.ctx, s.id, cx, cy, SYM, s.color, alpha);
   }
 
   _draw() {
@@ -215,42 +238,87 @@ export class SlotDisplay {
 
     c.textBaseline = 'middle';
 
-    // --- 1段目: 左 JP / 中央 ラベル / 右 STEP ---
-    const rowY = 30;
+    this._drawHeader(fever, heatColor);
+    this._drawSideMeters();
+    this._drawGrid(heatColor);
+    this._drawWinLines();
+    this._drawResult();
 
-    c.textAlign = 'left';
-    c.font = `600 17px ${FONT}`;
-    c.fillStyle = '#7f8fae';
-    c.letterSpacing = '4px';
-    c.fillText('JACKPOT', 26, rowY - 12);
-    c.letterSpacing = '0px';
-    c.font = `700 40px ${FONT}`;
-    c.fillStyle = '#ffcf5c';
-    c.shadowColor = 'rgba(255,176,58,0.75)';
-    c.shadowBlur = 16;
-    c.fillText(String(Math.floor(m.jp)), 26, rowY + 22);
-    c.shadowBlur = 0;
+    // --- 演出のオーバーレイ ---
+    this._drawNotice(heatColor);
+    this._drawCutIn(heatColor);
+    this._drawFreeze();
+
+    this.texture.needsUpdate = true;
+    this._dirty = false;
+  }
+
+  /** 最上段。いま何の演出中なのかだけを大きく出す */
+  _drawHeader(fever, heatColor) {
+    const c = this.ctx;
+    const s = this.state;
+    const m = this.meters;
 
     c.textAlign = 'center';
-    c.font = `600 28px ${FONT}`;
-    c.fillStyle = fever ? '#ffb03a' : (s.heat > 0 && s.playing ? heatColor : (s.tone === 'big' ? '#ffcf5c' : '#8ea0c0'));
+    c.font = `600 26px ${FONT}`;
+    c.fillStyle = fever ? '#ffb03a'
+      : (s.heat > 0 && s.playing ? heatColor : (s.tone === 'big' ? '#ffcf5c' : '#8ea0c0'));
     c.letterSpacing = '9px';
     const label = m.tilt > 0 ? `TILT ${Math.ceil(m.tilt)}`
       : fever ? `FEVER ${Math.ceil(m.fever)}` : s.label;
-    c.fillText(label, TEX_W / 2, rowY + 4);
+    c.fillText(label, TEX_W / 2, 26);
     c.letterSpacing = '0px';
+  }
 
-    c.textAlign = 'right';
-    c.font = `600 17px ${FONT}`;
-    c.fillStyle = '#7f8fae';
-    c.letterSpacing = '4px';
-    c.fillText('STEP', TEX_W - 26, rowY - 12);
-    c.letterSpacing = '0px';
+  /**
+   * 左右のメーター。
+   *
+   * 3x3 にすると盤面が縦に伸びる。メーター類まで上下に置いたままだと
+   * パネルの背が高くなりすぎて上段デッキか HUD のどちらかに掛かるので、
+   * 盤面の左右にできた余白へ逃がしてある。おかげで背は 0.82 しか伸びていない
+   */
+  _drawSideMeters() {
+    const c = this.ctx;
+    const m = this.meters;
+    const L = 28;                 // 左の基準
+    const R = TEX_W - 28;         // 右の基準
+
+    const cap = (text, x, y, align) => {
+      c.textAlign = align;
+      c.font = `600 16px ${FONT}`;
+      c.fillStyle = '#7f8fae';
+      c.letterSpacing = '4px';
+      c.fillText(text, x, y);
+      c.letterSpacing = '0px';
+    };
+
+    // --- 左上: ジャックポット ---
+    cap('JACKPOT', L, 108, 'left');
+    c.textAlign = 'left';
+    c.font = `700 42px ${FONT}`;
+    c.fillStyle = '#ffcf5c';
+    c.shadowColor = 'rgba(255,176,58,0.75)';
+    c.shadowBlur = 16;
+    c.fillText(String(Math.floor(m.jp)), L, 148);
+    c.shadowBlur = 0;
+
+    // --- 左下: 倍率 ---
+    const hot = m.odds > 1;
+    cap('ODDS', L, 258, 'left');
+    c.textAlign = 'left';
+    c.font = `700 42px ${FONT}`;
+    c.fillStyle = hot ? '#ff9f4d' : 'rgba(140,165,210,0.35)';
+    if (hot) { c.shadowColor = 'rgba(255,159,77,0.8)'; c.shadowBlur = 14; }
+    c.fillText(`x${m.odds}`, L, 298);
+    c.shadowBlur = 0;
+
+    // --- 右上: フィーバーまでのステップ ---
+    cap('STEP', R, 108, 'right');
     for (let i = 0; i < m.stepsMax; i++) {
       const lit = i < m.steps;
-      const cx = TEX_W - 26 - (m.stepsMax - 1 - i) * 34 - 12;
+      const cx = R - (m.stepsMax - 1 - i) * 34 - 12;
       c.beginPath();
-      c.arc(cx, rowY + 22, 11, 0, Math.PI * 2);
+      c.arc(cx, 146, 11, 0, Math.PI * 2);
       c.fillStyle = lit ? '#ffb03a' : 'rgba(140,165,210,0.18)';
       c.fill();
       if (lit) {
@@ -260,88 +328,150 @@ export class SlotDisplay {
       }
     }
 
-    // --- リール ---
-    const boxW = 168, boxH = 168, gap = 24;
-    const totalW = boxW * 3 + gap * 2;
-    const x0 = (TEX_W - totalW) / 2;
-    const y0 = 74;
+    // --- 右下: 保留 ---
+    cap('HOLD', R, 258, 'right');
+    for (let i = 0; i < m.holdMax; i++) {
+      const lit = i < m.hold;
+      const cx = R - (m.holdMax - 1 - i) * 34 - 12;
+      c.beginPath();
+      c.arc(cx, 296, 11, 0, Math.PI * 2);
+      c.fillStyle = lit ? '#5cc8ff' : 'rgba(140,165,210,0.18)';
+      c.fill();
+      if (lit) {
+        c.strokeStyle = 'rgba(92,200,255,0.9)';
+        c.lineWidth = 3;
+        c.stroke();
+      }
+    }
+  }
 
-    c.textAlign = 'center';
-    for (let i = 0; i < 3; i++) {
-      const bx = x0 + i * (boxW + gap);
-      const grad = c.createLinearGradient(0, y0, 0, y0 + boxH);
+  /** 3列 x 3段の盤面 */
+  _drawGrid(heatColor) {
+    const c = this.ctx;
+    const s = this.state;
+
+    // 盤面全体の下敷き。マスの隙間から背景が透けると落ち着かない
+    c.fillStyle = 'rgba(10,14,24,0.75)';
+    this._roundRect(GRID_X - 12, GRID_Y - 12, GRID_W + 24, GRID_H + 24, 22);
+    c.fill();
+
+    // 当たったマスは後で強調するので、先に印を集めておく
+    const litCell = [[false, false, false], [false, false, false], [false, false, false]];
+    for (const li of s.winLines) {
+      const L = LINES[li];
+      for (let col = 0; col < 3; col++) litCell[col][L[col]] = true;
+    }
+    const flash = 0.55 + 0.45 * Math.sin(this._blink * 9);
+
+    // マスの下地は段ごとに同じ。9個作ると点滅のたびに捨てるゴミが増えるので3個で使い回す
+    const rowGrad = [];
+    for (let row = 0; row < 3; row++) {
+      const by = cellY(row);
+      const grad = c.createLinearGradient(0, by, 0, by + CELL);
       grad.addColorStop(0, '#202a40');
       grad.addColorStop(1, '#0f1420');
-      c.fillStyle = grad;
-      this._roundRect(bx, y0, boxW, boxH, 18);
-      c.fill();
+      rowGrad.push(grad);
+    }
 
-      // リーチ中の3番目だけ枠を光らせる。色は heat に従う
-      const reaching = s.reach && i === 2 && s.spinning[2];
-      c.lineWidth = reaching ? 6 : 2;
-      c.strokeStyle = reaching
-        ? `${heatColor}${Math.round((0.55 + 0.45 * Math.sin(this._blink * 9)) * 255).toString(16).padStart(2, '0')}`
-        : 'rgba(140,165,210,0.25)';
-      c.stroke();
+    for (let col = 0; col < 3; col++) {
+      // リーチが掛かっている間は最後の列だけ枠を光らせる。色は heat に従う
+      const reaching = s.reach && col === 2 && s.spinning[2];
 
-      // 絵柄。滑っている最中の3番目だけ2枚描く
+      for (let row = 0; row < 3; row++) {
+        const bx = cellX(col);
+        const by = cellY(row);
+        const lit = litCell[col][row];
+
+        c.fillStyle = rowGrad[row];
+        this._roundRect(bx, by, CELL, CELL, 16);
+        c.fill();
+
+        if (lit) {
+          c.fillStyle = `rgba(255,207,92,${0.10 + 0.12 * flash})`;
+          c.fill();
+        }
+
+        c.lineWidth = lit || reaching ? 5 : 2;
+        c.strokeStyle = lit
+          ? `rgba(255,207,92,${0.45 + 0.55 * flash})`
+          : reaching
+            ? this._alphaHex(heatColor, 0.55 + 0.45 * Math.sin(this._blink * 9))
+            : 'rgba(140,165,210,0.22)';
+        c.stroke();
+      }
+
+      // 絵柄。滑っている最中の3列目だけ、リール帯を4コマぶん流す
       c.save();
-      this._roundRect(bx, y0, boxW, boxH, 18);
+      this._roundRect(GRID_X, GRID_Y, GRID_W, GRID_H, 16);
       c.clip();
-      const cx = bx + boxW / 2;
-      const cy = y0 + boxH / 2 + 6;
-      if (i === 2 && s.slip > 0) {
-        const dy = s.slip * boxH;
-        this._glyph(SYMBOLS[s.slipFrom] || SYMBOLS[0], cx, cy - dy, 1);
-        this._glyph(SYMBOLS[s.symbols[2]] || SYMBOLS[0], cx, cy - dy + boxH, 1);
+      if (col === 2 && s.slip > 0 && s.slipStrip) {
+        // slip は 1→0。shift が 0→1 で帯が1コマぶん下がる。
+        // shift=0 で [T0,T1,T2] (揃っていた窓)、shift=1 で [新,T0,T1] (実際の出目)
+        const shift = 1 - s.slip;
+        for (let i = 0; i < 4; i++) {
+          const y = cellCY(0) + (i - 1 + shift) * (CELL + GAP);
+          this._sym(s.slipStrip[i], cellCX(2), y, 1);
+        }
       } else {
-        this._glyph(SYMBOLS[s.symbols[i]] || SYMBOLS[0], cx, cy, s.spinning[i] ? 0.6 : 1);
+        for (let row = 0; row < 3; row++) {
+          this._sym(s.cols[col][row], cellCX(col), cellCY(row), s.spinning[col] ? 0.6 : 1);
+        }
       }
       c.restore();
     }
+  }
 
-    // --- 3段目: 左 倍率 / 中央 保留 / 右 結果 ---
-    const botY = y0 + boxH + 34;
+  /** 揃ったラインを1本の線で串刺しにする。どこで当たったのかを一目で示す */
+  _drawWinLines() {
+    const s = this.state;
+    if (!s.winLines.length) return;
+    const c = this.ctx;
+    const sym = SYMBOLS[s.winSymbol] || SYMBOLS[0];
+    const pulse = 0.5 + 0.5 * Math.sin(this._blink * 9);
 
-    c.textAlign = 'left';
-    const hot = m.odds > 1;
-    c.font = `700 30px ${FONT}`;
-    c.fillStyle = hot ? '#ff9f4d' : 'rgba(140,165,210,0.35)';
-    if (hot) { c.shadowColor = 'rgba(255,159,77,0.8)'; c.shadowBlur = 14; }
-    c.fillText(`ODDS x${m.odds}`, 26, botY);
-    c.shadowBlur = 0;
-
-    for (let i = 0; i < m.holdMax; i++) {
-      const cx = TEX_W / 2 - ((m.holdMax - 1) / 2) * 26 + i * 26;
+    c.save();
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    for (const li of s.winLines) {
+      const L = LINES[li];
       c.beginPath();
-      c.arc(cx, botY, 8, 0, Math.PI * 2);
-      c.fillStyle = i < m.hold ? '#5cc8ff' : 'rgba(140,165,210,0.18)';
-      c.fill();
-    }
+      c.moveTo(cellCX(0), cellCY(L[0]));
+      c.lineTo(cellCX(1), cellCY(L[1]));
+      c.lineTo(cellCX(2), cellCY(L[2]));
 
-    if (s.result) {
-      c.textAlign = 'right';
-      c.font = `700 34px ${FONT}`;
-      if (s.tone === 'big') {
-        c.fillStyle = `rgba(255,255,255,${0.55 + 0.45 * Math.sin(this._blink * 11)})`;
-        c.shadowColor = 'rgba(255,176,58,0.9)';
-        c.shadowBlur = 26;
-      } else if (s.tone === 'win') {
-        c.fillStyle = '#ffcf5c';
-      } else {
-        c.fillStyle = '#8ea0c0';
-      }
-      c.fillText(s.result, TEX_W - 26, botY);
+      c.strokeStyle = `rgba(255,255,255,${0.25 + 0.35 * pulse})`;
+      c.lineWidth = 14;
+      c.shadowColor = sym.color;
+      c.shadowBlur = 26;
+      c.stroke();
+
+      c.strokeStyle = sym.color;
+      c.lineWidth = 5;
       c.shadowBlur = 0;
+      c.stroke();
     }
+    c.restore();
+  }
 
-    // --- 演出のオーバーレイ ---
-    this._drawNotice(heatColor);
-    this._drawCutIn(heatColor);
-    this._drawFreeze();
+  /** 盤面の下に出す結果 */
+  _drawResult() {
+    const s = this.state;
+    if (!s.result) return;
+    const c = this.ctx;
 
-    this.texture.needsUpdate = true;
-    this._dirty = false;
+    c.textAlign = 'center';
+    c.font = `700 32px ${FONT}`;
+    if (s.tone === 'big') {
+      c.fillStyle = `rgba(255,255,255,${0.55 + 0.45 * Math.sin(this._blink * 11)})`;
+      c.shadowColor = 'rgba(255,176,58,0.9)';
+      c.shadowBlur = 26;
+    } else if (s.tone === 'win') {
+      c.fillStyle = '#ffcf5c';
+    } else {
+      c.fillStyle = '#8ea0c0';
+    }
+    c.fillText(s.result, TEX_W / 2, GRID_Y + GRID_H + 32);
+    c.shadowBlur = 0;
   }
 
   /** 予告の枠。heat の色で画面の縁を光らせる */
@@ -384,7 +514,7 @@ export class SlotDisplay {
     grad.addColorStop(0.5, color);
     grad.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = grad;
-    c.fillRect(0, TEX_H * 0.22, TEX_W * 0.55, TEX_H * 0.56);
+    c.fillRect(0, TEX_H * 0.18, TEX_W * 0.55, TEX_H * 0.64);
     c.restore();
 
     if (s.cutInLabel) {
@@ -426,19 +556,29 @@ export class SlotDisplay {
     const s = this.state;
     const anySpin = s.spinning[0] || s.spinning[1] || s.spinning[2];
     const anyBlink = (s.reach && s.spinning[2]) || s.tone === 'big'
-      || s.notice || this.meters.fever > 0;
+      || s.winLines.length > 0 || s.notice || this.meters.fever > 0;
 
     if (anySpin) {
       this._spinTimer += dt;
       if (this._spinTimer >= 0.055) {
         this._spinTimer = 0;
-        for (let i = 0; i < 3; i++) {
-          if (s.spinning[i]) s.symbols[i] = (rnd() * SYMBOLS.length) | 0;
+        for (let col = 0; col < 3; col++) {
+          if (s.spinning[col]) s.cols[col] = randCol();
         }
         this._dirty = true;
       }
     }
-    if (anyBlink) { this._blink += dt; this._dirty = true; }
+    if (anyBlink) {
+      // 位相は実時間で進める。滑らかさが要るのはここだけ
+      this._blink += dt;
+      // ただし **描き直しは間引く**。点滅のためだけに 1024x501 を毎フレーム
+      // 描き直してテクスチャを再アップロードすると、当たりのたび (全回転の 38.7%)
+      // に数ms/フレームが乗る。リールの回転と同じ 18Hz で十分見える
+      this._blinkTimer += dt;
+      if (this._blinkTimer >= 0.055) { this._blinkTimer = 0; this._dirty = true; }
+    } else {
+      this._blinkTimer = 0;
+    }
 
     // カットイン・フリーズ・滑りは秒で進める
     if (s.cutIn > 0) {
@@ -453,7 +593,7 @@ export class SlotDisplay {
     }
     if (s.slip > 0) {
       s.slip -= dt / (SHOW.slipMs / 1000);
-      if (s.slip < 0) s.slip = 0;
+      if (s.slip <= 0) { s.slip = 0; s.slipStrip = null; }
       this._dirty = true;
     }
 
@@ -464,33 +604,12 @@ export class SlotDisplay {
   /* 進行                                                                */
   /* ------------------------------------------------------------------ */
 
-  _stopReel(i, index) {
-    this.state.symbols[i] = index;
-    this.state.spinning[i] = false;
+  /** 1列 (3マス) をまとめて止める */
+  _stopReel(col, values) {
+    this.state.cols[col] = values.slice();
+    this.state.spinning[col] = false;
     this._dirty = true;
     this.sound.reelStop();
-  }
-
-  /**
-   * 出目を決める。
-   * アタリならゾロ目、ハズレは3つとも別の絵柄にする。
-   * ハズレでもリーチをかけたときは、滑りで見せる「当たっていた絵柄」も返す。
-   */
-  _figures(res) {
-    if (res.win) return { symbols: [res.index, res.index, res.index], reach: true, tease: res.index };
-    const n = SYMBOLS.length;
-    const pick = () => (rnd() * n) | 0;
-    const a = pick();
-    if (rnd() < 0.55) {
-      let c = pick();
-      while (c === a) c = pick();
-      return { symbols: [a, a, c], reach: true, tease: a };   // リーチをかけて外す
-    }
-    let b = pick();
-    while (b === a) b = pick();
-    let c = pick();
-    while (c === a || c === b) c = pick();
-    return { symbols: [a, b, c], reach: false, tease: -1 };
   }
 
   /** heat（期待度）を引く。結果を先に決めてから、その格に応じた重みで引く */
@@ -499,13 +618,17 @@ export class SlotDisplay {
     return pickWeighted(w);
   }
 
-  /** 擬似連。3つとも止まりかけて、また回り出す */
+  /** 擬似連。中段が揃いかけて、また回り出す */
   async _pseudo(times) {
     const s = this.state;
     for (let i = 1; i <= times; i++) {
-      const n = SYMBOLS.length;
-      const chance = (rnd() * n) | 0;
-      s.symbols = [chance, chance, chance];
+      const chance = randSym();
+      // 中段の3マスだけ揃えて「あと一歩」に見せる
+      s.cols = [
+        [randSym(), chance, randSym()],
+        [randSym(), chance, randSym()],
+        [randSym(), chance, randSym()],
+      ];
       s.spinning = [false, false, false];
       s.pseudo = i;
       s.label = `CHANCE x${i + 1}`;
@@ -522,16 +645,18 @@ export class SlotDisplay {
   /** SlotMachine から await される */
   async play(res) {
     const s = this.state;
-    const { symbols, reach, tease } = this._figures(res);
+    const { cols, winLines, reach, tease } = buildGrid(res);
     const heat = this._pickHeat(res);
     const tier = tierOf(res);
 
     s.playing = true;
     s.heat = heat;
     s.reach = false;
+    s.winLines = [];
+    s.winSymbol = -1;
     s.result = '';
     s.tone = 'idle';
-    s.cutIn = 0; s.freeze = 0; s.slip = 0; s.pseudo = 0;
+    s.cutIn = 0; s.freeze = 0; s.slip = 0; s.slipStrip = null; s.pseudo = 0;
     this._blink = 0;
 
     // ── ① 予告。heat 0 は無演出（実機も「無演出だから外れ」ではない）
@@ -562,10 +687,10 @@ export class SlotDisplay {
       this._dirty = true;
     }
 
-    // ── ④ 第1・第2停止
-    this._stopReel(0, symbols[0]);
+    // ── ④ 第1・第2停止。1列で3マス確定するので、リーチの掛かり方が賑やかになる
+    this._stopReel(0, cols[0]);
     await sleep(420);
-    this._stopReel(1, symbols[1]);
+    this._stopReel(1, cols[1]);
 
     if (reach) {
       s.reach = true;
@@ -597,17 +722,24 @@ export class SlotDisplay {
       await sleep(420);
     }
 
-    // ── ⑦ 第3停止。ハズレのリーチは「滑り」で当たり絵柄を一瞬見せる
-    if (reach && !res.win && tease >= 0) {
-      s.slipFrom = tease;
+    // ── ⑦ 第3停止。ハズレのリーチは「滑り」で、揃っていた窓を一瞬だけ見せる。
+    //     見た目のごまかしではなく、本当にリール帯を1コマ送っている
+    if (reach && !res.win && tease) {
+      s.slipStrip = [cols[2][0], tease[0], tease[1], tease[2]];
       s.slip = 1;
       this.sound.slip();
     }
-    this._stopReel(2, symbols[2]);
+    this._stopReel(2, cols[2]);
 
     // ── ⑧ 結果
     s.notice = false;
     this.bezelMat.emissive.setHex(0x000000);
+
+    if (res.win) {
+      s.winLines = winLines;
+      s.winSymbol = res.index;
+      this._dirty = true;
+    }
 
     if (res.jp) {
       s.tone = 'big';
@@ -618,14 +750,25 @@ export class SlotDisplay {
       this.sound.jackpot();
       await sleep(2600);
     } else if (res.win) {
-      const big = res.amount >= 60;
+      // 大当たり扱いにするかどうか。2つの条件の OR にしてある。
+      //
+      //   ① 格が big (バー / 赤7)
+      //      amount だけで見ると、1ラインあたりの pay を削ったときに
+      //      「最長のリーチで煽ってから中位役の扱いで落ちる」ずれが起きる。
+      //      赤7の85%は1ライン = 44枚で、旧閾値 60 に届かなかった
+      //   ② 枚数が伸びた回 (多ライン / 高倍率)。格が下でも手応えは大きい
+      //
+      // 枚数の閾値は 3x3 化で pay を約2/3に削ったぶん、同じ比率で下げてある
+      // (60 → 40 / 150 → 100 / 12 → 8)。旧構成と同じ頻度で鳴る
+      const big = tier === 'big' || res.amount >= 40;
       s.tone = big ? 'big' : 'win';
       const mul = res.odds > 1 ? ` x${res.odds}` : '';
-      s.result = `${res.symbol.name}${mul}  +${res.amount}`;
+      const ln = res.lines > 1 ? ` ${res.lines}LINE` : '';
+      s.result = `${res.symbol.name}${ln}${mul}  +${res.amount}`;
       this._dirty = true;
       this.onWin(res.index);
-      if (res.amount >= 150) this.sound.jackpot();
-      else this.sound.win(res.amount >= 60 ? 2 : res.amount >= 12 ? 1 : 0);
+      if (res.amount >= 100) this.sound.jackpot();
+      else this.sound.win(big ? 2 : res.amount >= 8 ? 1 : 0);
       await sleep(big ? 2400 : 1400);
     } else {
       s.tone = 'miss';
@@ -642,6 +785,8 @@ export class SlotDisplay {
     s.tone = 'idle';
     s.result = '';
     s.heat = 0;
+    s.winLines = [];
+    s.winSymbol = -1;
     this._dirty = true;
   }
 }
