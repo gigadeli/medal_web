@@ -9,10 +9,11 @@ import { CFG } from '../config.js';
  * 演出（リールの回転と停止）は present() に委ねてあり、ここは結果だけを決める。
  */
 export class SlotMachine {
-  constructor({ hopper, present, sound }) {
+  constructor({ hopper, present, sound, onDraw }) {
     this.hopper = hopper;
     this.present = present;      // (result) => Promise
     this.sound = sound;
+    this.onDraw = onDraw || (() => {});   // 通算成績の記録用
 
     this.queue = 0;
     this.busy = false;
@@ -58,7 +59,9 @@ export class SlotMachine {
     }
     this.stats.byId[symbol.id] = (this.stats.byId[symbol.id] || 0) + 1;
 
-    return { index, symbol, amount: symbol.pay, win };
+    const result = { index, symbol, amount: symbol.pay, win };
+    this.onDraw(result);
+    return result;
   }
 
   async _pump() {

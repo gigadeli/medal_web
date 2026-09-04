@@ -1,5 +1,5 @@
 import { gameStore, useStore } from '../store';
-import { SYMBOLS } from '../SlotController';
+import { SYMBOLS } from '../symbols';
 import styles from './PayTablePanel.module.css';
 
 /** ブランク(pay 0)は配当表に出さない */

@@ -57,6 +57,8 @@ export type GameState = {
   earned: number;
   lost: number;
   gameOver: boolean;
+  /** localStorage に書けていない (プライベートモード / 容量超過) */
+  saveError: boolean;
   hold: number;
   holdMax: number;
   muted: boolean;
@@ -76,19 +78,6 @@ export type StatsState = {
   stepMs: number;
 };
 
-export type SlotTone = 'idle' | 'miss' | 'win' | 'big';
-
-export type SlotState = {
-  visible: boolean;
-  label: string;
-  /** CFG.slot.symbols のインデックス */
-  symbols: readonly [number, number, number];
-  spinning: readonly [boolean, boolean, boolean];
-  reach: boolean;
-  result: string;
-  tone: SlotTone;
-};
-
 export const gameStore = new Store<GameState>({
   medals: 0,
   best: 0,
@@ -96,6 +85,7 @@ export const gameStore = new Store<GameState>({
   earned: 0,
   lost: 0,
   gameOver: false,
+  saveError: false,
   hold: 0,
   holdMax: 3,
   muted: false,
@@ -110,14 +100,4 @@ export const statsStore = new Store<StatsState>({
   fps: 0,
   onField: 0,
   stepMs: 0,
-});
-
-export const slotStore = new Store<SlotState>({
-  visible: false,
-  label: 'CHANCE',
-  symbols: [0, 0, 0],
-  spinning: [false, false, false],
-  reach: false,
-  result: '',
-  tone: 'idle',
 });

@@ -1,13 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { App } from './App';
-import { SlotController, type SlotSound } from './SlotController';
 import { gameStore, statsStore, type GameState, type StatsState } from './store';
 import './theme.css';
 
 export type MountOptions = {
   /** ゲームオーバー画面の「もう一度」 */
   onRestart: () => void;
+  /** ゲームオーバー画面の「記録を消す」 */
+  onClearData: () => void;
 };
 
 export type UIHandle = {
@@ -17,8 +18,6 @@ export type UIHandle = {
   setStats(patch: Partial<StatsState>): void;
   /** 獲得ポップを1回打つ */
   popGain(amount?: number): void;
-  /** 抽選演出。Jackpot からはこれを await する */
-  slot: SlotController;
   /** 起動失敗を画面に出す */
   fail(message: string): void;
 };
@@ -29,19 +28,14 @@ export type UIHandle = {
  * ゲームループは React を一切知らない。ストアに値を書くだけで、
  * 実際に変わった値を購読しているコンポーネントだけが再レンダリングされる。
  */
-export function mountUI(
-  container: HTMLElement,
-  sound: SlotSound,
-  options: MountOptions
-): UIHandle {
+export function mountUI(container: HTMLElement, options: MountOptions): UIHandle {
   const root: Root = createRoot(container);
   root.render(
     <StrictMode>
-      <App onRestart={options.onRestart} />
+      <App onRestart={options.onRestart} onClearData={options.onClearData} />
     </StrictMode>
   );
 
-  const slot = new SlotController(sound);
   let gainSeq = 0;
 
   return {
@@ -51,11 +45,10 @@ export function mountUI(
       gainSeq += 1;
       gameStore.set({ gainSeq, gainAmount: amount });
     },
-    slot,
     fail: (message) => {
       root.render(
         <StrictMode>
-          <App error={message} onRestart={options.onRestart} />
+          <App error={message} onRestart={options.onRestart} onClearData={options.onClearData} />
         </StrictMode>
       );
     },

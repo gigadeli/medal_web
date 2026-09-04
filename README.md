@@ -24,7 +24,8 @@ npm run typecheck  # UI（TypeScript）の型チェック
 | | |
 |---|---|
 | `src/game/`, `src/physics/`, `src/core/` | ゲーム本体。素の JavaScript |
-| `src/ui/` | HUD と演出。**React + TypeScript** |
+| `src/ui/` | HUD（持ち枚数・配当表・計測値・ゲームオーバー）。**React + TypeScript** |
+| `src/game/SlotDisplay.js` | スロットの演出。筐体前面の液晶として 3D シーンの中に描く |
 | `src/ui/mount.tsx` | 両者の唯一の境界。ゲームループは React を知らない |
 
 UI の状態は `src/ui/store.ts` の小さな外部ストアを `useSyncExternalStore` で購読しています。
@@ -76,10 +77,14 @@ UI の状態は `src/ui/store.ts` の小さな外部ストアを `useSyncExterna
   通常プレイでは払い出しと釣り合って 160〜230枚に落ち着くので、上限は余裕として置いてあります
 - `hopper.fieldLimit` — ホッパーが場内を埋める上限（330）。ここが実質的な「重さの天井」
 - `layout.tableFront.rx` — 落とし口の登り勾配。0 にすると水平に戻ります
-- `layout.pusherLip` — 上段の縁の壁。`gap`（中央の開口）を狭めすぎると上段に溜まって詰まります
-  （開口3.0で払い戻しが59%まで落ちました。DESIGN.md §7.7）
+- `layout.pusherSideWall` — 上段の左右の壁。**手前には壁を付けないこと**。
+  塞ぐと下段にメダルが降りてこなくなり払い戻しが36%まで落ちます（DESIGN.md §7.7）
+- `layout.pocketX` — サイドポケットの口の広さ。ロストを減らすならここが効きます
+- `slot.display` — 演出パネルの位置と大きさ。上は HUD、下は上段デッキに掛からない範囲で（DESIGN.md §7.9）
 
-セーブデータの設計（未実装）は DESIGN.md §12 にあります。
+持ち枚数・通算成績・設定はブラウザの localStorage に自動保存されます（数百バイト）。
+場のメダルは「何枚あったか」だけを保存し、並びは毎回作り直します。
+記録の消去はゲームオーバー画面から行えます。詳細は DESIGN.md §11。
 
 設計の詳細と、実装中に判明した落とし穴は [DESIGN.md](./DESIGN.md) に書いてあります。
 特に次の2つは、知らずに触ると壊れるので目を通しておくことをおすすめします。

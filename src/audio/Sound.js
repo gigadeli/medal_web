@@ -51,6 +51,12 @@ export class Sound {
     }
   }
 
+  /** セーブから復元するときなど、値を直接指定する */
+  setMuted(v) {
+    if (this.muted === !!v) return;
+    this.toggleMute();
+  }
+
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) {

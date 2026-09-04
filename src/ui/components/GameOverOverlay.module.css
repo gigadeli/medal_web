@@ -38,3 +38,29 @@
 }
 .button:hover { filter: brightness(1.08); }
 .note { margin-top: 12px; font-size: 11px; color: var(--dim); }
+
+.buttons { display: flex; gap: 10px; justify-content: center; }
+.danger {
+  font: inherit; font-size: 13px; letter-spacing: .12em; font-weight: 600;
+  color: #fff; background: var(--danger);
+  border: 0; border-radius: 8px; padding: 11px 24px; cursor: pointer;
+}
+.ghost {
+  font: inherit; font-size: 13px; letter-spacing: .12em;
+  color: var(--dim); background: transparent;
+  border: 1px solid rgba(140, 165, 210, .3); border-radius: 8px;
+  padding: 11px 24px; cursor: pointer;
+}
+.danger:hover, .ghost:hover { filter: brightness(1.12); }
+
+.link {
+  display: block; margin: 14px auto 0;
+  font: inherit; font-size: 11px; letter-spacing: .1em;
+  color: var(--dim); background: none; border: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link:hover { color: var(--ink); }
+
+.warn {
+  margin: 0 0 16px; font-size: 11px; line-height: 1.7; color: #ff8f9b;
+}
