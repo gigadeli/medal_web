@@ -203,9 +203,12 @@ async function main() {
         feverLeft: f.active ? Math.ceil(f.left) : 0,
       }),
       // 突入と終了で映像を出し入れする。JP 演出に台を明け渡すときも
-      // FeverMode 側が exit() を通るので、ここだけ見ていれば止まる
-      onEnter: () => feverVideo.play(),
-      onExit: () => feverVideo.stop(),
+      // FeverMode 側が exit() を通るので、ここだけ見ていれば止まる。
+      //
+      // 映像の間は解像度の自動調整を止める (DESIGN.md §13.2)。
+      // 25秒ぶんの負荷で降格させると、**明けてもぼやけたまま**になる
+      onEnter: () => { feverVideo.play(); stage.setQualityHold(true); },
+      onExit: () => { feverVideo.stop(); stage.setQualityHold(false); },
     });
     fever.steps = clampInt(saved && saved.steps, 0, 0, CFG.fever.stepsToEnter - 1);
     fever.onChange(fever);

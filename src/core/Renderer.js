@@ -70,8 +70,11 @@ export class Stage {
     this._h = 0;
     this._dolly = 1;
     this._portrait = null;
+    this._maxPixelRatio = this._pixelRatio;   // 上げ直すときの上限
     this._frames = 0;
     this._probeAt = 0;
+    this._good = 0;            // 続けて余裕があった計測の回数
+    this._hold = false;        // 重い演出の最中は測らない
     this._warmup = 2;          // 起動直後の数秒は WASM 初期化などで当てにならない
     this._contextLost = false;
     this.resize();
@@ -214,11 +217,38 @@ export class Stage {
   }
 
   /**
-   * 実測で解像度を落とす (モバイルのみ)。
+   * 重いと分かっている演出の間だけ、解像度の自動調整を止める
+   * (フィーバーの映像。DESIGN.md §13.2)。
+   *
+   * 25秒で終わるもののために解像度を落とすと、**その後ずっと**ぼやけた画面で
+   * 遊ぶことになる。一時的な負荷は「そのまま重く描く」ほうが損が小さい。
+   */
+  setQualityHold(on) {
+    const v = !!on;
+    if (this._hold === v) return;
+    this._hold = v;
+    // 明けの1回目は演出をまたいだ計測になるので捨てる
+    this._good = 0;
+    this._frames = 0;
+    this._probeAt = performance.now();
+  }
+
+  _setPixelRatio(v) {
+    const next = Math.max(QUALITY.minPixelRatio, Math.min(this._maxPixelRatio, v));
+    if (Math.abs(next - this._pixelRatio) < 1e-3) return;
+    this._pixelRatio = next;
+    this.renderer.setPixelRatio(next);
+    this.renderer.setSize(this._w, this._h);
+  }
+
+  /**
+   * 実測で解像度を上下させる (モバイルのみ)。
    *
    * 端末の性能は事前に分からないので、2秒ごとの実測 fps で決める。
-   * **下げるだけで上げ直さない**。上げ下げすると境目で行ったり来たりして、
-   * かえって見苦しくなる。
+   *
+   * 下げる 45fps 未満 / 上げる 55fps 超、と閾値を離してあるのは往復を防ぐため。
+   * さらに上げるほうは「続けて2回余裕がある」ことを条件にしている。
+   * 同じ閾値で上下させると、境目の端末で解像度がぱたぱた切り替わって見苦しい。
    */
   _adapt(now) {
     if (!QUALITY.adaptiveResolution || this._contextLost) return;
@@ -233,11 +263,18 @@ export class Stage {
     // 戻ってきた最初の計測は「4秒で3フレーム」のような値になるので捨てる。
     // これを信じると、タブを切り替えただけで解像度が落ちる
     if (span > 4000) return;
+    if (this._hold) return;
 
-    if (fps < 45 && this._pixelRatio > QUALITY.minPixelRatio) {
-      this._pixelRatio = Math.max(QUALITY.minPixelRatio, this._pixelRatio - 0.25);
-      this.renderer.setPixelRatio(this._pixelRatio);
-      this.renderer.setSize(this._w, this._h);
+    if (fps < 45) {
+      this._good = 0;
+      this._setPixelRatio(this._pixelRatio - 0.25);
+    } else if (fps > 55) {
+      if (++this._good >= 2) {
+        this._good = 0;
+        this._setPixelRatio(this._pixelRatio + 0.25);
+      }
+    } else {
+      this._good = 0;
     }
   }
 

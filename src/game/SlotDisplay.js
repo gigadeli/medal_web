@@ -3,6 +3,7 @@ import { CFG } from '../config.js';
 import { rnd } from '../core/Rng.js';
 import { drawSymbol } from '../render/SymbolArt.js';
 import { LINES, buildGrid, tierOf } from './SlotLines.js';
+import { QUALITY } from '../core/Device.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -10,6 +11,8 @@ const SYMBOLS = CFG.slot.symbols;
 const D = CFG.slot.display;
 const SHOW = CFG.slot.show;
 const VID = CFG.fever.video;
+/** 映像を焼き直す頻度。端末が非力なら CFG より下げる (core/Device.js) */
+const VID_FPS = Math.min(VID.fps, QUALITY.videoFps);
 
 const TEX_W = 1024;
 const TEX_H = Math.round(TEX_W * (D.height / D.width));
@@ -135,9 +138,20 @@ export class SlotDisplay {
 
     // --- キャンバス ---
     this.canvas = document.createElement('canvas');
-    this.canvas.width = TEX_W;
-    this.canvas.height = TEX_H;
+    /*
+     * 実際に確保する画素は端末で変える。
+     *
+     * **描画コードの座標系は 1024x501 のまま**にしたいので、canvas だけ縮めて
+     * ctx.scale で吸収する。こうしないと CELL や各メーターの位置を全部
+     * 書き換えることになる。
+     *
+     * ここが効くのはフィーバーの映像。液晶は書き直すたびに全面が
+     * テクスチャに上がるので、面積がそのままアップロード量になる
+     */
+    this.canvas.width = Math.round(TEX_W * QUALITY.lcdScale);
+    this.canvas.height = Math.round(TEX_H * QUALITY.lcdScale);
     this.ctx = this.canvas.getContext('2d');
+    if (QUALITY.lcdScale !== 1) this.ctx.scale(QUALITY.lcdScale, QUALITY.lcdScale);
 
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
@@ -633,7 +647,7 @@ export class SlotDisplay {
     // 流れている間だけ描き直しを速める (§3.3)
     if (this.video && this.video.playing) {
       this._videoTimer += dt;
-      if (this._videoTimer >= 1 / VID.fps) { this._videoTimer = 0; this._dirty = true; }
+      if (this._videoTimer >= 1 / VID_FPS) { this._videoTimer = 0; this._dirty = true; }
     } else {
       this._videoTimer = 0;
     }

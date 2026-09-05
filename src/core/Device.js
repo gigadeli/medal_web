@@ -63,6 +63,10 @@ export const IS_MOBILE = FORCED
  *   glassTransmission 手前のガラスの屈折。**シーンをもう一度描く**ので実質2倍
  *   medalSegments     円柱の分割 24 → 12。585枚ぶんの三角形が半分になる
  *   maxPixelRatio     iPhone の DPR は 3。等倍で描くと画素数が9倍になる
+ *   lcdScale          液晶のテクスチャ。1024x501 は電話の画面には過剰で、
+ *                     書き直すたびに 2MB が上がる。フィーバーの映像は毎秒
+ *                     何十回もそれをやるので、ここが効く
+ *   videoFps          フィーバーの映像を液晶に焼き直す頻度
  */
 export const QUALITY = IS_MOBILE
   ? {
@@ -70,8 +74,11 @@ export const QUALITY = IS_MOBILE
       antialias: false,
       glassTransmission: false,
       medalSegments: 12,
+      lcdScale: 0.625,       // 1024x501 → 640x313 (アップロード量は 2.6分の1)
+      videoFps: 24,
       maxPixelRatio: 1.5,
-      // 実測で追いつかないときはここまで落とす (下げるだけ。上げ直さない)
+      // 実測で追いつかないときはここまで落とす。
+      // 余裕が戻れば maxPixelRatio まで上げ直す (core/Renderer.js の _adapt)
       minPixelRatio: 0.75,
       adaptiveResolution: true,
     }
@@ -80,6 +87,8 @@ export const QUALITY = IS_MOBILE
       antialias: true,
       glassTransmission: true,
       medalSegments: CFG.medal.segments,
+      lcdScale: 1,
+      videoFps: CFG.fever.video.fps,
       maxPixelRatio: 2,
       minPixelRatio: 2,
       adaptiveResolution: false,
