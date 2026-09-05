@@ -204,7 +204,10 @@ export class Launcher {
   }
 
   syncMesh() {
-    this.group.rotation.y = this.yaw;
+    // 符号に注意。three.js の Y 回転は +角度で -Z を **-X 側**へ回すが、
+    // 弾道側 (aimVector) は yaw が正なら +X へ飛ばす。
+    // ここを同符号にすると、砲身は左を向いているのにメダルは右へ飛ぶ
+    this.group.rotation.y = -this.yaw;
     this.barrel.position.copy(aimVector(0)).multiplyScalar(-this._recoil * P.recoil);
 
     const sin = Math.sin(this.yaw), cos = Math.cos(this.yaw);
