@@ -13,10 +13,35 @@
 
 .mute {
   bottom: 16px; right: 16px;
-  font-size: 11px; color: var(--dim); letter-spacing: .12em;
+  font: inherit; font-size: 11px; color: var(--dim); letter-spacing: .12em;
+  pointer-events: auto;   /* #ui-root は none なので、ここだけ有効化する */
+  cursor: pointer;
 }
 .muted { color: var(--danger); }
 
 @media (max-width: 720px) {
   .help { display: none; }
+}
+
+/* ------------------------------------------------------------------
+ * モバイル。
+ * 説明は2つだけなので幅を食わない。中央寄せをやめて左下に置き、
+ * 右下の SOUND と並べる (縦持ちだと中央では消音ボタンとぶつかる)。
+ * ------------------------------------------------------------------ */
+.help.compact {
+  display: inline-block;          /* 上の max-width:720px を打ち消す */
+  left: calc(8px + env(safe-area-inset-left));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  transform: none;
+  font-size: 10px; line-height: 1.4;
+}
+.help.compact kbd { font-size: 10px; padding: 0 5px; }
+.help.compact .sep { margin: 0 6px; }
+
+:global(html[data-device='mobile']) .mute {
+  right: calc(8px + env(safe-area-inset-right));
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  font-size: 10px;
+  /* 指で押す的は 44px 角が目安。文字は小さいままで当たりだけ広げる */
+  min-height: 34px; padding: 8px 14px;
 }

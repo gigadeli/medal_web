@@ -64,3 +64,11 @@
 .warn {
   margin: 0 0 16px; font-size: 11px; line-height: 1.7; color: #ff8f9b;
 }
+
+/* モバイル。幅 320px の端末でも収まるように */
+:global(html[data-device='mobile']) .card {
+  min-width: 0; width: min(88vw, 320px); padding: 22px 20px 18px;
+}
+:global(html[data-device='mobile']) .button,
+:global(html[data-device='mobile']) .danger,
+:global(html[data-device='mobile']) .ghost { padding: 12px 20px; }

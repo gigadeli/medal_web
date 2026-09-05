@@ -1,5 +1,6 @@
 import { CFG } from './config.js';
 import { Stage } from './core/Renderer.js';
+import { initDevice } from './core/Device.js';
 import { Loop } from './core/Loop.js';
 import { createPhysics } from './physics/World.js';
 import { Cabinet } from './game/Cabinet.js';
@@ -56,6 +57,10 @@ function clampInt(v, fallback, min, max) {
  *   青7        → JP 当選 → タワー演出
  */
 async function main() {
+  // 端末の判定と、それに伴う DOM 側の下ごしらえ (html[data-device] / 拡大の抑止)。
+  // CSS も UI も三次元側もこの属性と core/Device.js の定数を見るので、最初に呼ぶ
+  initDevice();
+
   const sound = new Sound();
 
   // --- セーブの読み込み (DESIGN.md §11) ---
@@ -113,6 +118,8 @@ async function main() {
     },
     onSelectSpecial: (kind) => special && special.select(kind),
     onBump: () => bump && bump.hit(),
+    // 保存は描画ループ側の lastMuted の比較が拾う (M キーと同じ経路)
+    onToggleMute: () => sound.toggleMute(),
   });
 
   // ストアへの反映は UI ができてから配線する (Wallet 側は UI も保存も知らない)

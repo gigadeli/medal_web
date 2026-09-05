@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
+import { QUALITY } from '../core/Device.js';
 import { createFixedBox } from '../physics/World.js';
 
 const L = CFG.layout;
@@ -38,11 +39,29 @@ export class Cabinet {
     this.matFrame = new THREE.MeshStandardMaterial({
       color: 0x9aa6bd, metalness: 0.9, roughness: 0.25,
     });
-    this.matGlass = new THREE.MeshPhysicalMaterial({
-      color: 0xbcd4ff, metalness: 0, roughness: 0.03,
-      transmission: 0.9, thickness: 0.4, ior: 1.45,
-      transparent: true, opacity: 0.25, side: THREE.DoubleSide,
-    });
+    /*
+     * 手前のガラス。
+     *
+     * transmission は「裏側の景色をもう一度描いたもの」を合成する。
+     * つまり **シーンを毎フレーム2回描く**ことになり、モバイルでは
+     * これ1枚のために描画時間が倍近くになる。
+     * 端末が非力なときは屈折を諦めて、ただの半透明板にする (見た目だけの差)。
+     *
+     * ついでに、透過の落とし穴もここで消える。transmission のパスには
+     * transparent: true のものが入らないので、ガラスの裏に置いた半透明の物は
+     * 描かれない (DESIGN_GIMMICKS.md §3.11 の実測)。屈折を切った側では
+     * その制約が無いが、両方で同じに見えるよう役物側は不透明のままにしてある。
+     */
+    this.matGlass = QUALITY.glassTransmission
+      ? new THREE.MeshPhysicalMaterial({
+          color: 0xbcd4ff, metalness: 0, roughness: 0.03,
+          transmission: 0.9, thickness: 0.4, ior: 1.45,
+          transparent: true, opacity: 0.25, side: THREE.DoubleSide,
+        })
+      : new THREE.MeshStandardMaterial({
+          color: 0xbcd4ff, metalness: 0.1, roughness: 0.06,
+          transparent: true, opacity: 0.13, side: THREE.DoubleSide,
+        });
     this.matGlow = new THREE.MeshStandardMaterial({
       color: 0x1a2436, emissive: 0xffb03a, emissiveIntensity: 1.4, roughness: 0.5,
     });

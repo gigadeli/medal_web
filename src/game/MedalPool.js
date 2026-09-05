@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
+import { QUALITY } from '../core/Device.js';
 import { rnd } from '../core/Rng.js';
 
 const L = CFG.layout;
@@ -24,7 +25,12 @@ export class MedalPool {
     this.world = world;
     this.RAPIER = RAPIER;
 
-    const geo = new THREE.CylinderGeometry(M.radius, M.radius, M.thickness, M.segments);
+    // 円柱の分割数だけは端末で変える。コライダーは Rapier の cylinder を
+    // 別に作っているので、いくら削っても当たり方・積み方は 1mm も変わらない
+    // (見た目だけの差。core/Device.js)
+    const geo = new THREE.CylinderGeometry(
+      M.radius, M.radius, M.thickness, QUALITY.medalSegments
+    );
     // 色は instanceColor 側で持つので、マテリアルは白にしておく。
     // 特殊メダル (DESIGN_GIMMICKS.md §3.7) はこの1枚のマテリアルのまま色だけ変える
     const mat = new THREE.MeshStandardMaterial({

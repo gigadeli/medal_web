@@ -25,3 +25,17 @@
   18%  { opacity: 1; transform: translateY(0); }
   100% { opacity: 0; transform: translateY(-14px); }
 }
+
+/* モバイル。縦持ちだと上端の帯にこれと STATS が並ぶので、幅を詰める */
+:global(html[data-device='mobile']) .panel {
+  top: calc(8px + env(safe-area-inset-top));
+  left: calc(8px + env(safe-area-inset-left));
+  min-width: 0;
+}
+:global(html[data-device='mobile']) .value { font-size: 28px; }
+:global(html[data-device='mobile']) .label { font-size: 10px; }
+:global(html[data-device='mobile']) .best { font-size: 10px; }
+:global(html[data-device='mobile']) .rows {
+  font-size: 10px; gap: 0 8px; margin-top: 6px; padding-top: 5px;
+}
+:global(html[data-device='mobile']) .gain { top: 60px; left: 16px; font-size: 18px; }

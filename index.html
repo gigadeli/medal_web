@@ -2,7 +2,11 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<!-- viewport-fit=cover でノッチの下まで描く。安全域は CSS の env() で避ける -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#05070d" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <title>Medal Pusher</title>
 <style>
   /* ここに置くのは「JS が読み込まれる前に必要な最低限」だけ。
@@ -10,8 +14,18 @@
   html, body {
     margin: 0; padding: 0; width: 100%; height: 100%;
     overflow: hidden; background: #05070d;
+    /* 端でのゴムバウンド / 引っ張って更新を止める (iOS Safari) */
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
   }
-  #app { position: fixed; inset: 0; }
+  #app {
+    position: fixed; inset: 0;
+    /* 指のスクロール・ダブルタップ拡大をブラウザに渡さない。
+       ここを付けないと、撃とうとするたびに画面が動く */
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;   /* 長押しのメニューを出さない */
+  }
   #app canvas { display: block; }
 </style>
 </head>

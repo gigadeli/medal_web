@@ -40,6 +40,8 @@ export class Launcher {
     this.inserted = 0;
     this.holding = false;
     this._recoil = 0;
+    // 触れている指の id。2本目が乗ったら発射をやめて視点操作に譲る
+    this._pointers = new Set();
 
     // 着地点 (上段デッキの天面) に届く初速と、その軌道。
     // 距離も高さも「首の位置」から測る。メダルが出るのは砲身の先なので、
@@ -131,12 +133,27 @@ export class Launcher {
     const dom = this.dom;
 
     this._onDown = (e) => {
-      if (e.button !== 0) return;   // 右/中ボタンは視点操作
+      // 右/中ボタンは視点操作。タッチの pointerdown は button 0 で来る
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+
+      // 2本目の指は視点操作 (OrbitControls の TWO)。
+      // 1本目で撃ってしまうと、視点を回そうとするたびに1枚出ていく
+      this._pointers.add(e.pointerId);
+      if (this._pointers.size > 1) {
+        this.holding = false;
+        return;
+      }
+
       this.holding = true;
       this.pending = true;          // 押した瞬間の1枚は必ず出す
       this.cooldown = 0;
     };
-    this._onUp = () => { this.holding = false; };
+    // pointercancel も拾うこと。iOS では通知や画面端のスワイプで
+    // pointerup が来ずに握りっぱなしになり、メダルが出続ける
+    this._onUp = (e) => {
+      if (e && e.pointerId !== undefined) this._pointers.delete(e.pointerId);
+      if (this._pointers.size === 0) this.holding = false;
+    };
 
     this._onKeyDown = (e) => {
       if (e.code === 'Space') {
@@ -151,6 +168,7 @@ export class Launcher {
 
     dom.addEventListener('pointerdown', this._onDown);
     window.addEventListener('pointerup', this._onUp);
+    window.addEventListener('pointercancel', this._onUp);
     window.addEventListener('keydown', this._onKeyDown);
     window.addEventListener('keyup', this._onKeyUp);
     dom.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -230,6 +248,7 @@ export class Launcher {
   dispose() {
     this.dom.removeEventListener('pointerdown', this._onDown);
     window.removeEventListener('pointerup', this._onUp);
+    window.removeEventListener('pointercancel', this._onUp);
     window.removeEventListener('keydown', this._onKeyDown);
     window.removeEventListener('keyup', this._onKeyUp);
   }

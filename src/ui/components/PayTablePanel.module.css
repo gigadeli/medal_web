@@ -24,6 +24,7 @@
   text-align: center;
 }
 .label { font-size: 10px; letter-spacing: .22em; color: var(--dim); }
+.title { font-weight: 400; }
 /* 表の枚数が「1ラインあたり」であることの断り (DESIGN_GIMMICKS.md §3.10) */
 .perLine {
   display: block; margin-top: 2px;
@@ -113,4 +114,48 @@
   .lineMap { margin: 3px 0; padding-bottom: 3px; }
   .rows { gap: 1px; }
   .hold { margin-top: 4px; }
+}
+
+/* ------------------------------------------------------------------
+ * モバイルの縦持ち。
+ *
+ * 右の縦帯は幅 390px の画面では 3割を占めるうえ、盤面のいちばん見たい
+ * 右半分に重なる。縦持ちでは上下が空くので、**横一列の帯**にして
+ * 下段 (ITEM の上) に移す。
+ *
+ * 落とすのは表題と早見図だけ。絵柄・枚数・倍率・保留ランプは
+ * 「いま何が当たると何枚か / 何回ぶん溜まっているか」という判断材料なので残す。
+ * 横持ちでは画面が低いだけなので、既存の max-height 用の段組みに任せる。
+ * ------------------------------------------------------------------ */
+@media (orientation: portrait) {
+  :global(html[data-device='mobile']) .panel {
+    top: auto; width: auto;
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(118px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px;
+  }
+  :global(html[data-device='mobile']) .title,
+  :global(html[data-device='mobile']) .perLine,
+  :global(html[data-device='mobile']) .lineMap { display: none; }
+
+  :global(html[data-device='mobile']) .label {
+    display: flex; align-items: center; order: 3;
+  }
+  :global(html[data-device='mobile']) .odds { margin-top: 0; }
+
+  :global(html[data-device='mobile']) .rows {
+    order: 1; flex: 1; flex-direction: row; justify-content: space-between; gap: 3px;
+  }
+  :global(html[data-device='mobile']) .cell {
+    flex-direction: column; gap: 0; padding: 2px 4px;
+  }
+  :global(html[data-device='mobile']) .cell svg { width: 17px; height: 17px; }
+  :global(html[data-device='mobile']) .pay { font-size: 10px; }
+
+  :global(html[data-device='mobile']) .hold {
+    order: 2; margin-top: 0; gap: 5px;
+    padding-left: 8px; border-left: 1px solid rgba(140, 165, 210, .18);
+  }
 }

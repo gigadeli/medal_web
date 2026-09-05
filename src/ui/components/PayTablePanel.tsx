@@ -46,7 +46,9 @@ export function PayTablePanel() {
   return (
     <div className={`panel ${styles.panel}`}>
       <div className={styles.label}>
-        PAY TABLE
+        {/* 見出しは要素で包んでおく。狭い画面では表題ごと落として、
+            倍率のバッジ (これは機能情報) だけ残すため */}
+        <b className={styles.title}>PAY TABLE</b>
         <b className={styles.perLine}>1 LINE あたり</b>
         {odds > 1 && <b className={styles.odds}>×{odds}</b>}
       </div>

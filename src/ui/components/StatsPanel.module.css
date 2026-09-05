@@ -5,3 +5,9 @@
 .value {
   color: var(--ink); font-variant-numeric: tabular-nums; font-weight: 600;
 }
+
+:global(html[data-device='mobile']) .panel {
+  top: calc(8px + env(safe-area-inset-top));
+  right: calc(8px + env(safe-area-inset-right));
+  font-size: 10px; line-height: 1.5;
+}

@@ -1,4 +1,5 @@
 import { statsStore, useStore } from '../store';
+import { IS_MOBILE } from '../../core/Device.js';
 import styles from './StatsPanel.module.css';
 
 /**
@@ -13,7 +14,8 @@ export function StatsPanel() {
     <div className={`panel ${styles.panel}`}>
       <div>FPS <b className={styles.value}>{fps}</b></div>
       <div>FIELD <b className={styles.value}>{onField}</b></div>
-      <div>STEP <b className={styles.value}>{stepMs.toFixed(1)}</b> ms</div>
+      {/* 物理1ステップの実測。狭い画面では場所を食うわりに読まれないので落とす */}
+      {!IS_MOBILE && <div>STEP <b className={styles.value}>{stepMs.toFixed(1)}</b> ms</div>}
     </div>
   );
 }

@@ -13,6 +13,8 @@ export type MountOptions = {
   onSelectSpecial?: (kind: string) => void;
   /** 台パン (キーボードの B と同じ操作) */
   onBump?: () => void;
+  /** 消音の切り替え (キーボードの M と同じ操作)。キーの無い端末用 */
+  onToggleMute?: () => void;
 };
 
 export type UIHandle = {
@@ -40,6 +42,7 @@ export function mountUI(container: HTMLElement, options: MountOptions): UIHandle
     onClearData: options.onClearData,
     onSelectSpecial: options.onSelectSpecial ?? noop,
     onBump: options.onBump ?? noop,
+    onToggleMute: options.onToggleMute ?? noop,
   };
   root.render(
     <StrictMode>

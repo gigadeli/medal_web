@@ -12,6 +12,7 @@ type Props = {
   onClearData?: () => void;
   onSelectSpecial?: (kind: string) => void;
   onBump?: () => void;
+  onToggleMute?: () => void;
 };
 
 const noop = () => {};
@@ -24,14 +25,16 @@ const noop = () => {};
  * JP・STEP・倍率は筐体の液晶 (game/SlotDisplay.js) が受け持つ。
  * HUD に出すのは「プレイヤーの持ち物」だけにして、盤面の上を空けておく。
  */
-export function App({ error, onRestart, onClearData, onSelectSpecial, onBump }: Props) {
+export function App({
+  error, onRestart, onClearData, onSelectSpecial, onBump, onToggleMute,
+}: Props) {
   return (
     <>
       <WalletPanel />
       <PayTablePanel />
       <StatsPanel />
       <ToolsPanel onSelectSpecial={onSelectSpecial ?? noop} onBump={onBump ?? noop} />
-      <ControlsBar />
+      <ControlsBar onToggleMute={onToggleMute ?? noop} />
       <GameOverOverlay
         onRestart={onRestart ?? noop}
         onClearData={onClearData ?? noop}

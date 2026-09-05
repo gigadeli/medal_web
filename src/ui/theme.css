@@ -34,3 +34,24 @@
   border-radius: var(--panel-radius);
   backdrop-filter: blur(6px);
 }
+
+/* ------------------------------------------------------------------
+ * モバイル (core/Device.js が html[data-device] を立てる)
+ *
+ * 位置決めは各 *.module.css 側にある。ここでやるのは全体の縮小と、
+ * 「重いものを外す」ことだけ。
+ * ------------------------------------------------------------------ */
+html[data-device='mobile'] .panel {
+  padding: 7px 10px;
+  border-radius: 8px;
+  /* backdrop-filter は canvas の上に重ねると iOS で目に見えて重い。
+     パネルの枚数だけ全画面の合成が走るので、素直に不透明寄りの背景にする */
+  backdrop-filter: none;
+  background: rgba(8, 12, 22, 0.78);
+}
+
+/* タップの青いハイライトと、長押しの選択・メニューを出さない */
+html[data-device='mobile'] #ui-root {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+}
