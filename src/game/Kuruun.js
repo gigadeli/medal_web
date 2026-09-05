@@ -215,7 +215,7 @@ export class Kuruun {
 
   _materials() {
     this.matDish = new THREE.MeshStandardMaterial({
-      color: 0x46587f, metalness: 0.55, roughness: 0.42, side: THREE.DoubleSide,
+      color: 0x5a6f9e, metalness: 0.5, roughness: 0.4, side: THREE.DoubleSide,
     });
     this.matWinRim = new THREE.MeshStandardMaterial({
       color: 0x4a3410, emissive: 0xffb43a, emissiveIntensity: 2.4, roughness: 0.35,
@@ -226,10 +226,13 @@ export class Kuruun {
     this.matStrut = new THREE.MeshStandardMaterial({
       color: 0x8e9ab2, metalness: 0.9, roughness: 0.28,
     });
-    this.matTube = new THREE.MeshPhysicalMaterial({
-      color: 0xa8c8ff, metalness: 0, roughness: 0.12,
-      transmission: 0.85, thickness: 0.3, ior: 1.4,
-      transparent: true, opacity: 0.22, side: THREE.DoubleSide,
+    // 管は**不透明の裏面だけ**を描く。
+    // 手前のガラス (MeshPhysicalMaterial の transmission) は、その裏側を
+    // 別パスで描き直して合成する仕組みで、**そのパスには透過マテリアルが入らない**。
+    // 役物を筐体の中に入れた時点で、半透明の管も球もガラス越しに消えてしまう。
+    // 裏面だけの不透明マテリアルなら、樋のように見えて中の球も隠れない
+    this.matTube = new THREE.MeshStandardMaterial({
+      color: 0x243350, metalness: 0.2, roughness: 0.75, side: THREE.BackSide,
     });
     this.matLampOff = new THREE.MeshStandardMaterial({
       color: 0x1a2333, emissive: 0x24405e, emissiveIntensity: 0.4, roughness: 0.5,
@@ -277,15 +280,29 @@ export class Kuruun {
 
   _buildFrame() {
     const top = tierY(1) + DISH_TOP + 0.5;
-    const bottom = K.y0 - 1.0;
+    // 支柱は皿の高さぶんだけ。下に伸ばすとメダルの流れの中に棒が立つことになり、
+    // コライダーを持たないぶんメダルがすり抜けて見える
+    const bottom = K.y0 - 0.45;
 
     // 皿を吊る支柱。皿の外周のすぐ外に立てる
-    for (const sx of [-(D.R + 0.24), D.R + 0.24]) {
+    const strutX = D.R + 0.24;
+    for (const sx of [-strutX, strutX]) {
       const strut = new THREE.Mesh(
         new THREE.CylinderGeometry(0.08, 0.08, top - bottom, 12), this.matStrut
       );
       strut.position.set(K.x + sx, (top + bottom) / 2, K.z);
       this.group.add(strut);
+    }
+
+    // 左の内壁 (x=-7.0) へ渡す腕。宙に浮いて見えないよう、ここで筐体に留める
+    const armLen = Math.abs(-7.0 - (K.x - strutX));
+    for (const ay of [bottom + 0.25, top - 0.25]) {
+      const arm = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.07, 0.07, armLen, 10), this.matStrut
+      );
+      arm.rotation.z = Math.PI / 2;
+      arm.position.set(K.x - strutX - armLen / 2, ay, K.z);
+      this.group.add(arm);
     }
 
     // 段ランプ。いま球がどの段にいるか
@@ -301,8 +318,9 @@ export class Kuruun {
 
     // 役物だけを照らす明かり。筐体の外に浮いているので、
     // 台の中の照明 (Renderer の inner) がここまで届かない
-    const lamp = new THREE.PointLight(0xbfd8ff, 110, 14, 2);
-    lamp.position.set(K.x + 0.4, (tierY(1) + K.y0) / 2, K.z + 2.6);
+    // ガラス越しに見ることになるぶん、役物には専用の明かりを当てる
+    const lamp = new THREE.PointLight(0xbfd8ff, 150, 13, 2);
+    lamp.position.set(K.x + 0.6, tierY(1) + 0.8, K.z + 1.4);
     this.group.add(lamp);
 
     // 銘板。何をすると何枚出るのかが台に書いていないと意味が伝わらない
@@ -333,24 +351,28 @@ export class Kuruun {
       new THREE.PlaneGeometry(2.66, 0.66),
       new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })
     );
-    // 銘板は左下の ITEM パネルに隠れないよう、少し右に寄せて置く
-    plate.position.set(K.x + 1.35, K.y0 - 0.62, K.z + 0.15);
+    // 銘板は最下段の皿の真下に吊る
+    plate.position.set(K.x, K.y0 - 0.72, K.z + 0.15);
     plate.rotation.x = -0.22;
     this.group.add(plate);
   }
 
   _buildBall() {
+    // 皿より小さいものを追いかけてもらうので、球はしっかり光らせる。
+    // **透過にしてはいけない** (ガラスの transmission のパスから外れて消える)。
+    // 消えるときは不透明のまま縮める
     this.ballMat = new THREE.MeshStandardMaterial({
-      // 皿より小さいものを追いかけてもらうので、球はしっかり光らせる
-      color: 0x0f2a38,
+      color: 0x2b4e63,
       emissive: BALL.color,
-      emissiveIntensity: 2.4,
-      metalness: 0.25,
-      roughness: 0.15,
-      transparent: true,
-      opacity: 1,
+      emissiveIntensity: 3.5,
+      metalness: 0.2,
+      roughness: 0.12,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(BALL.radius, 20, 14), this.ballMat);
+    // 見た目だけ少し大きくする。物理 (穴に入る判定) は BALL.radius のままで、
+    // ガラス越しに 8px 程度にしかならない球を追いかけてもらうための下駄
+    this.mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(BALL.radius * 1.25, 20, 14), this.ballMat
+    );
     this.mesh.visible = false;
     this.group.add(this.mesh);
 
@@ -387,12 +409,23 @@ export class Kuruun {
     ];
   }
 
-  /** リフトの管。筐体の左前の柱に沿って立ち上げる */
+  /**
+   * リフトの管。払い出し口の開口をくぐって筐体の中に入り、
+   * 役物の下をくぐって**奥側**を立ち上がる。
+   *
+   * ガラスは y≧1.5 にしか無い (下は払い出し口の開口) ので、中へ入る経路は
+   * そこをくぐらせる。立ち上げる場所は他の3方向がどれも塞がっている:
+   *   手前 … ガラス (z≦6.25) を突き抜ける
+   *   左   … サイドポケットの落下経路。メダルが管を突き抜けて見える
+   *   右   … 液晶 (x±3.7, z=6.1) の裏に回って、球が上がるところが見えない
+   */
   _liftPoints() {
+    const z = K.z - LIFT_X;   // 皿の外周のすぐ外 (奥側)
     return [
-      new THREE.Vector3(K.x - LIFT_X, -1.40, K.z),
-      new THREE.Vector3(K.x - LIFT_X, 2.60, K.z),
-      new THREE.Vector3(K.x - LIFT_X, tierY(1) + DISH_TOP + 0.55, K.z),
+      new THREE.Vector3(K.x, 0.55, 7.40),   // 払い出しスロープの上、ガラスの下端より下
+      new THREE.Vector3(K.x, 1.20, 5.40),   // 開口をくぐって筐体の中へ
+      new THREE.Vector3(K.x, 1.45, z),      // 役物の下をくぐって奥側へ
+      new THREE.Vector3(K.x, tierY(1) + DISH_TOP + 0.55, z),
     ];
   }
 
@@ -454,7 +487,7 @@ export class Kuruun {
     this.stats.runs++;
     this._nextTier = 1;
     this._setPath(pts, K.liftSeconds, 'lift');
-    this.ballMat.opacity = 1;
+    this.mesh.scale.setScalar(1);
     this.mesh.visible = true;
     if (this.sound) this.sound.kuruunLift();
   }
@@ -473,7 +506,8 @@ export class Kuruun {
   _advance(dt) {
     this._pathT = Math.min(1, this._pathT + dt / this._pathDur);
     this.currP.copy(this._path.getPoint(this._pathT));
-    if (this._fade) this.ballMat.opacity = Math.max(0, 1 - this._pathT);
+    // 穴に飲まれる演出。不透明のまま縮めて消す (透過はガラス越しに描かれない)
+    if (this._fade) this.mesh.scale.setScalar(Math.max(0.02, 1 - this._pathT));
     return this._pathT >= 1;
   }
 
