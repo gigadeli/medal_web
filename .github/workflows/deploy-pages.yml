@@ -1,0 +1,67 @@
+# GitHub Pages への静的デプロイ
+#
+# main に push すると Vite でビルドして dist/ をそのまま公開する。
+# 公開先は https://<ユーザー名>.github.io/<リポジトリ名>/ (例: /medal_web/)。
+#
+# ■ 最初に1回だけ必要な設定
+#   リポジトリの Settings → Pages → Build and deployment → Source を
+#   「GitHub Actions」にする。ブランチ公開 (gh-pages) は使わない。
+#
+# ■ サブディレクトリ公開でもパスが壊れない理由
+#   vite.config.js が base: './' なので、出力される index.html は
+#   ./assets/... の相対パスになる。base をリポジトリ名に書き換える必要はない。
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  # 手動でも流せるようにしておく (Actions タブから実行)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 走っているデプロイは止めない。後から来たものを待たせる
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pages の公開設定を読む (base_path などを後続に渡す)
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          # ローカルの開発環境と同じ系列。Vite 8 は Node 20.19+ / 22.12+ が要る
+          node-version: 22
+          cache: npm
+
+      # node_modules はリポジトリに入れていない (プラットフォーム固有の
+      # ネイティブバイナリを使うため)。lock ファイルから入れ直す
+      - run: npm ci
+
+      # Vite のビルドは型を見ないので、型チェックは別に通す
+      - run: npm run typecheck
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

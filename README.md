@@ -19,6 +19,16 @@ npm run preview
 npm run typecheck  # UI（TypeScript）の型チェック
 ```
 
+### GitHub Pages に置く
+
+`main` に push すると `.github/workflows/deploy-pages.yml` がビルドして公開します
+（手動実行も可）。**最初に1回だけ**、リポジトリの
+**Settings → Pages → Build and deployment → Source** を「**GitHub Actions**」に
+変更してください。公開先は `https://<ユーザー名>.github.io/<リポジトリ名>/` です。
+
+`vite.config.js` の `base: './'` により出力が相対パスになっているので、
+サブディレクトリ公開でもパスの書き換えは要りません。
+
 ## 構成
 
 | | |
