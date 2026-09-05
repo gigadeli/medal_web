@@ -343,4 +343,38 @@ export class Sound {
     // 上昇スイープ
     this._tone(300, 0.9, 'sawtooth', 0.12, 0, 2400);
   }
+
+  /* ---- 3段クルーン (DESIGN_GIMMICKS.md §3.11) ---- */
+
+  /** 球がリフトで持ち上がる */
+  kuruunLift() {
+    this._tone(220, 1.2, 'sine', 0.10, 0, 660);
+  }
+
+  /** 皿に球が入った。段が上がるほど高く */
+  kuruunEnter(tier = 1) {
+    this._tone(520 * Math.pow(1.26, tier - 1), 0.12, 'triangle', 0.20);
+  }
+
+  /** 当たり穴を抜けて次の段へ */
+  kuruunPass(tier = 1) {
+    const base = 660 * Math.pow(1.25, tier - 1);
+    this._tone(base, 0.14, 'triangle', 0.26, 0, base * 1.5);
+    this._tone(base * 2, 0.28, 'sine', 0.16, 0.08);
+  }
+
+  /** ハズレ穴に飲まれた */
+  kuruunMiss() {
+    this._tone(380, 0.22, 'sine', 0.16, 0, 190);
+  }
+
+  /** 3段抜けた */
+  kuruunWin() {
+    const notes = [659.25, 783.99, 1046.5, 1318.5, 1567.98];
+    notes.forEach((f, i) => {
+      this._tone(f, 0.30, 'square', 0.20, i * 0.10);
+      this._tone(f * 2, 0.30, 'triangle', 0.10, i * 0.10);
+    });
+    this._tone(400, 0.8, 'sawtooth', 0.12, 0, 2600);
+  }
 }

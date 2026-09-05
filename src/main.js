@@ -8,10 +8,11 @@ import { Shutters } from './game/Shutters.js';
 import { PayoutChute } from './game/PayoutChute.js';
 import { Pusher } from './game/Pusher.js';
 import { MedalPool } from './game/MedalPool.js';
-import { Dispenser } from './game/Dispenser.js';
+import { Launcher } from './game/Launcher.js';
 import { Payout } from './game/Payout.js';
 import { Hopper } from './game/Hopper.js';
 import { LotteryBallSet } from './game/LotteryBall.js';
+import { Kuruun } from './game/Kuruun.js';
 import { SlotMachine } from './game/SlotMachine.js';
 import { SlotDisplay } from './game/SlotDisplay.js';
 import { FeverMode } from './game/FeverMode.js';
@@ -79,6 +80,8 @@ async function main() {
   let special = null;
   let bump = null;
   let fever = null;
+  // 特殊メダルを選ぶと発射口の色が変わる。生成は物理ができてから
+  let launcher = null;
 
   // 場の枚数は物理ができてからでないと数えられないので、あとで差し替える
   let currentFieldStock = () => fieldStock;
@@ -162,12 +165,25 @@ async function main() {
     const hopper = new Hopper(pool);
     const antiJam = new AntiJam(pool);
 
+    // 3段クルーン (§3.11)。ボールが払い出し口に落ちるたびに回る役物で、
+    // フィールドとは別の球を持っている。3段抜けたら固定 300枚。
+    // 払い出しは他の当たりと同じくホッパー経由なので、ここで持ち枚数は動かさない。
+    // 増えるのは降ってきたメダルが押し出されて落ちたときで、それは Payout が拾う
+    const kuruun = new Kuruun(stage.scene, { hopper, sound });
+
     special = new SpecialMedals({
       pool, sound,
-      onChange: (s) => ui.setGame({
-        gold: s.stock.gold, bomb: s.stock.bomb, ticket: s.stock.ticket,
-        selected: s.selected || '',
-      }),
+      onChange: (s) => {
+        ui.setGame({
+          gold: s.stock.gold, bomb: s.stock.bomb, ticket: s.stock.ticket,
+          selected: s.selected || '',
+        });
+        // 次に撃つ1枚が何かを発射口の色で見せる (HUD だけだと手元から目が離れる)
+        if (launcher) {
+          const kind = s.selected && CFG.special.kinds[s.selected];
+          launcher.setMarkerColor(kind ? kind.color : 0x5cc8ff);
+        }
+      },
     });
     if (saved) special.restore(saved.special);
 
@@ -245,19 +261,18 @@ async function main() {
       },
     });
 
-    const dispenser = new Dispenser(
-      stage.scene, stage.camera, stage.renderer.domElement, pool,
-      {
-        // TILT 中は投入できない (§3.8)
-        canInsert: () => wallet.canInsert() && bump.tilt <= 0,
-        getSpawnOptions: () => special.takeSpawnOptions(),
-        onInsert: (medal) => {
-          wallet.spend(1);
-          jackpot.onInsert(1);
-          special.track(medal);
-        },
-      }
-    );
+    // 手前の発射口から上段デッキへ撃ち上げる (DESIGN.md §7.2)。
+    // 狙いは自動で首を振るので、プレイヤーが決めるのは撃つ瞬間だけ
+    launcher = new Launcher(stage.scene, stage.renderer.domElement, pool, {
+      // TILT 中は投入できない (§3.8)
+      canInsert: () => wallet.canInsert() && bump.tilt <= 0,
+      getSpawnOptions: () => special.takeSpawnOptions(),
+      onInsert: (medal) => {
+        wallet.spend(1);
+        jackpot.onInsert(1);
+        special.track(medal);
+      },
+    });
 
     // デバッグパネルは開発ビルドにしか積まない。
     // 本番に残すと D キーで「ジャックポットを撃つ」「この絵柄でまわす」が
@@ -269,7 +284,7 @@ async function main() {
       const { Debug } = await import('./ui/Debug.js');
       debug = new Debug({
         scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
-        pusher, table, fever, jackpot, jpShow, special, bump, chute,
+        pusher, table, fever, jackpot, jpShow, special, bump, chute, kuruun,
       });
     }
 
@@ -286,7 +301,7 @@ async function main() {
     const loop = new Loop(
       // ---- 固定タイムステップ (物理) ----
       (dt) => {
-        dispenser.update(dt);
+        launcher.update(dt);
         hopper.update(dt);
         special.update(dt);        // ボムの導火線
         bump.update(dt);
@@ -311,10 +326,16 @@ async function main() {
         pool.captureTransforms();
         pool.wakeNear(pusher.frontZ());
 
-        // ボールが落ちたらフィーバーの STEP が進む (サイドポケットはハズレ)
+        // ボールが落ちたらフィーバーの STEP が進み、クルーンが回る
+        // (サイドポケットはハズレ。どちらも起きない)
         const fell = balls.update(dt);
-        for (let i = 0; i < fell.payout; i++) fever.addStep();
+        for (const at of fell.at) {
+          fever.addStep();
+          kuruun.request(at);
+        }
         if (fell.pocket > 0) sound.lose();
+
+        kuruun.update(dt);
 
         payout.update();
         // タワーを積んでいる最中に揺さぶると自壊する
@@ -333,8 +354,9 @@ async function main() {
         table.syncMesh();
         shutters.syncMesh();
         chute.syncMesh();
-        dispenser.syncMesh();
+        launcher.syncMesh();
         balls.syncMesh(alpha);
+        kuruun.syncMesh(alpha);
         slotDisplay.update(realDt);
         pool.sync(alpha);
 
@@ -392,8 +414,8 @@ async function main() {
     if (import.meta.env.DEV) {
       window.game = {
         CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
-        dispenser, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
-        wallet, ui, fever, jackpot, jpShow, bump, special,
+        launcher, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
+        wallet, ui, fever, jackpot, jpShow, bump, special, kuruun,
       };
     }
   } catch (err) {

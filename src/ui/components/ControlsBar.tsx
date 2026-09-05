@@ -2,8 +2,7 @@ import { gameStore, useStore } from '../store';
 import styles from './ControlsBar.module.css';
 
 const KEYS: Array<[string[], string]> = [
-  [['マウス移動', '←', '→'], '投入位置'],
-  [['クリック', 'Space'], '投入（長押しで連続）'],
+  [['クリック', 'Space'], '発射（狙いは自動で首振り・長押しで連続）'],
   [['B'], '台パン'],
   [['1', '2', '3'], '特殊メダル'],
   [['右ドラッグ'], '視点'],

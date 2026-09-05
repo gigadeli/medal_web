@@ -11,7 +11,7 @@ import { CFG } from '../config.js';
  */
 export class Debug {
   constructor({ scene, world, pool, stage, payout, slot, hopper, balls,
-                pusher, table, fever, jackpot, jpShow, special, bump, chute }) {
+                pusher, table, fever, jackpot, jpShow, special, bump, chute, kuruun }) {
     this.world = world;
     this.pool = pool;
     this.stage = stage;
@@ -27,6 +27,7 @@ export class Debug {
     this.special = special;
     this.bump = bump;
     this.chute = chute;
+    this.kuruun = kuruun;
     this.enabled = false;
 
     // --- Rapier のコライダー可視化 ---
@@ -106,6 +107,17 @@ export class Debug {
     fGim.add(this, 'openFlippers').name('フリッパーを開く');
     fGim.add(this, 'chuckerReport').name('チャッカーの入賞数をログ');
 
+    const fKuruun = gui.addFolder('3段クルーン');
+    fKuruun.add(this, 'kuruunRun').name('球を1個入れる');
+    fKuruun.add(this, 'kuruunLoop').name('連続で回す (実測用)');
+    fKuruun.add(this, 'kuruunReport').name('段ごとの通過率をログ');
+    fKuruun.add(this, 'kuruunTrials', 100, 5000, 100).name('試行回数');
+    fKuruun.add(this, 'kuruunSample').name('早送りで当選率を測る');
+    fKuruun.add(CFG.kuruun.entry, 'speed', 4, 20, 0.1).name('皿への初速');
+    fKuruun.add(CFG.kuruun.entry, 'jitter', 0, 0.4, 0.01).name('初速のばらつき');
+    fKuruun.add(CFG.kuruun.dish, 'damp', 0, 1.2, 0.01).name('転がり抵抗');
+    fKuruun.add(CFG.kuruun.dish, 'bowlH', 0.05, 0.6, 0.01).name('椀の深さ (要リロード)');
+
     const fTool = gui.addFolder('ツール');
     fTool.add(this, 'burst50').name('メダル50枚 投入');
     fTool.add(this, 'clearMedals').name('メダル全消去');
@@ -151,6 +163,66 @@ export class Debug {
   };
 
   openFlippers = () => this.chute && this.chute.triggerFlippers();
+
+  /* ---- 3段クルーン (DESIGN_GIMMICKS.md §3.11) ---- */
+
+  kuruunRun = () => this.kuruun && this.kuruun.request(null);
+
+  /**
+   * 当選率の実測用。空くたびに球を入れ続ける。
+   * クルーンの当選率は穴の大きさと球の減衰から**物理で決まる**ので、
+   * 設定値を眺めても分からない。回して数えるしかない
+   */
+  kuruunLoop = () => {
+    if (!this.kuruun) return;
+    if (this._kuruunLoop) {
+      clearInterval(this._kuruunLoop);
+      this._kuruunLoop = null;
+      this.kuruunReport();
+      return;
+    }
+    this._kuruunLoop = setInterval(() => this.kuruun.request(null), 500);
+  };
+
+  /**
+   * 当選率の実測。皿の上は Rapier に依らない積分なので、
+   * 描画も物理も回さずに早送りで回せる (1000回が一瞬で終わる)
+   */
+  kuruunSample = () => {
+    if (!this.kuruun) return;
+    const k = this.kuruun;
+    const dt = CFG.physics.timestep;
+    // 測っている間に 300枚 x 試行回数 を吐かせない。音も止める
+    const hopper = k.hopper, sound = k.sound;
+    k.hopper = null; k.sound = null;
+    k.stats = { runs: 0, wins: 0, visits: [0, 0, 0], passes: [0, 0, 0] };
+    const t0 = performance.now();
+    for (let n = 0; n < this.kuruunTrials; n++) {
+      k.state = 'idle'; k.timer = 0; k.pending = 0;
+      k._nextTier = 1; k.stats.runs++;
+      k._release(1);
+      for (let i = 0; i < 60 * 120 && k.state !== 'idle'; i++) {
+        if (k.state === 'spin') k._spin(dt);
+        else if (k.state === 'drop') k._finish();
+        else if (k.state === 'transfer') k._release(k._nextTier);
+        else break;
+      }
+    }
+    k.state = 'idle'; k.timer = 1; k.pending = 0; k.mesh.visible = false;
+    k.hopper = hopper; k.sound = sound;
+    console.log(`${Math.round(performance.now() - t0)}ms`);
+    this.kuruunReport();
+  };
+
+  kuruunTrials = 500;
+
+  kuruunReport = () => {
+    if (!this.kuruun) return;
+    const r = this.kuruun.report();
+    console.table(r.rows);
+    const rate = r.runs ? ((r.wins / r.runs) * 100).toFixed(2) : '0';
+    console.log(`投入 ${r.runs} / 3段抜け ${r.wins} (${rate}%)`);
+  };
 
   /**
    * チャッカーの実測用。

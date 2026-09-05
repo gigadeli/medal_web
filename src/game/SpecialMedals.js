@@ -67,7 +67,7 @@ export class SpecialMedals {
   }
 
   /**
-   * Dispenser が投入の直前に呼ぶ。
+   * Launcher が発射の直前に呼ぶ。
    * @returns {object|null} MedalPool.spawn に渡すオプション
    */
   takeSpawnOptions() {

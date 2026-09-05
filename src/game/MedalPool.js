@@ -148,6 +148,7 @@ export class MedalPool {
   /**
    * メダルを1枚投入する。
    * @param {object} [opts] kind: 特殊メダルの種類 / flat: 傾けずに置く (タワー建設用)
+   *   / vel: 初速 / angvel: 初期の角速度 (どちらも発射式の投入で使う)
    * @returns {object|null} 投入したメダル。満杯なら null
    */
   spawn(x, y = L.spawn.y, z = L.spawn.z, opts = null) {
@@ -170,13 +171,18 @@ export class MedalPool {
     _quat.setFromEuler(_euler);
     m.body.setRotation({ x: _quat.x, y: _quat.y, z: _quat.z, w: _quat.w }, true);
 
-    m.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
-    const spin = opts && opts.flat ? 0 : 1;
-    m.body.setAngvel({
-      x: (rnd() - 0.5) * 2 * spin,
-      y: (rnd() - 0.5) * 6,
-      z: (rnd() - 0.5) * 2 * spin,
-    }, true);
+    // 発射式の投入 (game/Launcher.js) は初速と自転を指定して撃ち出す
+    m.body.setLinvel(opts && opts.vel ? opts.vel : { x: 0, y: 0, z: 0 }, true);
+    if (opts && opts.angvel) {
+      m.body.setAngvel(opts.angvel, true);
+    } else {
+      const spin = opts && opts.flat ? 0 : 1;
+      m.body.setAngvel({
+        x: (rnd() - 0.5) * 2 * spin,
+        y: (rnd() - 0.5) * 6,
+        z: (rnd() - 0.5) * 2 * spin,
+      }, true);
+    }
     m.body.wakeUp();
     m.counted = false;
     m.live = true;

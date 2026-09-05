@@ -195,15 +195,25 @@ export class LotteryBallSet {
 
   get nudges() { return this.balls.reduce((a, b) => a + b.nudges, 0); }
 
-  /** @returns {{payout:number, pocket:number}} このステップで落ちた数 */
+  /**
+   * @returns {{payout:number, pocket:number, at:Array<{x:number,y:number,z:number}>}}
+   *   このステップで落ちた数と、払い出し口に落ちた位置。
+   *   位置はクルーンのリフトが球を拾う場所になる (DESIGN_GIMMICKS.md §3.11)
+   */
   update(dt) {
     let payout = 0, pocket = 0;
+    const at = [];
     for (const b of this.balls) {
       const fell = b.update(dt);
-      if (fell === 'payout') payout++;
-      else if (fell === 'pocket') pocket++;
+      if (fell === 'payout') {
+        payout++;
+        // _park() の前に捉えた座標。落ちた瞬間の位置がそのまま残っている
+        at.push({ x: b.currP.x, y: b.currP.y, z: b.currP.z });
+      } else if (fell === 'pocket') {
+        pocket++;
+      }
     }
-    return { payout, pocket };
+    return { payout, pocket, at };
   }
 
   syncMesh(alpha) {
