@@ -9,6 +9,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const SYMBOLS = CFG.slot.symbols;
 const D = CFG.slot.display;
 const SHOW = CFG.slot.show;
+const VID = CFG.fever.video;
 
 const TEX_W = 1024;
 const TEX_H = Math.round(TEX_W * (D.height / D.width));
@@ -123,8 +124,12 @@ export class SlotDisplay {
       stepsMax: CFG.fever.stepsToEnter,
       fever: 0,                // 残り秒。0 なら通常
     };
+    /** フィーバー中の映像 (game/FeverVideo.js)。setVideo で挿す */
+    this.video = null;
+
     this._spinTimer = 0;
     this._blinkTimer = 0;
+    this._videoTimer = 0;
     this._dirty = true;
     this._blink = 0;
 
@@ -169,6 +174,9 @@ export class SlotDisplay {
 
     this._draw();
   }
+
+  /** フィーバー中に背景へ流す映像を挿す (game/FeverVideo.js) */
+  setVideo(video) { this.video = video; }
 
   /**
    * 常時表示のメーターを更新する。
@@ -220,6 +228,12 @@ export class SlotDisplay {
     c.fillStyle = fever ? '#180a04' : '#070b14';
     c.fillRect(0, 0, TEX_W, TEX_H);
 
+    // フィーバー中は背景に映像を流す。
+    // **別の板に貼ってはいけない**。液晶は手前のガラスの裏にあるので、
+    // 透過を使った瞬間にガラス越しで消える (§3.11 の実測)。
+    // この canvas に不透明のまま焼き込めば、その制約に触れない
+    this._drawVideo();
+
     // 上下のうっすらした光
     const g = c.createLinearGradient(0, 0, 0, TEX_H);
     if (fever) {
@@ -250,6 +264,43 @@ export class SlotDisplay {
 
     this.texture.needsUpdate = true;
     this._dirty = false;
+  }
+
+  /**
+   * フィーバーの映像を背景に敷く。
+   *
+   * 液晶は 2.04:1 と横に長い。素材の縦横比に関わらず帯を出したくないので、
+   * はみ出すぶんを切る「cover」で貼る。
+   * そのままだとリールも数字も読めないので、上に黒を敷いてから本体を描く。
+   */
+  _drawVideo() {
+    const v = this.video && this.video.frame;
+    if (!v) return;
+    const c = this.ctx;
+    const scale = Math.max(TEX_W / v.videoWidth, TEX_H / v.videoHeight);
+    const w = v.videoWidth * scale;
+    const h = v.videoHeight * scale;
+    c.drawImage(v, (TEX_W - w) / 2, (TEX_H - h) / 2, w, h);
+    c.fillStyle = `rgba(0,0,0,${VID.dim})`;
+    c.fillRect(0, 0, TEX_W, TEX_H);
+
+    // 左右の端をさらに落とす。盤面 (幅 384) の外はメーターの置き場で、
+    // 明るい映像が来ると数字が読めない。中央は明るいまま残したいので端だけ
+    const e = VID.edge;
+    const scrim = (x0, x1) => {
+      const gr = c.createLinearGradient(x0, 0, x1, 0);
+      gr.addColorStop(0, `rgba(0,0,0,${VID.edgeDim})`);
+      // メーターが載っているのは端から 210px ほど。そこまでは濃さを保ち、
+      // 盤面 (320px から) までの残りで一気に抜く。
+      // 直線に落とすと数字に掛かるころには薄くなっていて読めない (実測)
+      gr.addColorStop(0.65, `rgba(0,0,0,${VID.edgeDim * 0.92})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      return gr;
+    };
+    c.fillStyle = scrim(0, e);
+    c.fillRect(0, 0, e, TEX_H);
+    c.fillStyle = scrim(TEX_W, TEX_W - e);
+    c.fillRect(TEX_W - e, 0, e, TEX_H);
   }
 
   /** 最上段。いま何の演出中なのかだけを大きく出す */
@@ -576,6 +627,15 @@ export class SlotDisplay {
       if (this._blinkTimer >= 0.055) { this._blinkTimer = 0; this._dirty = true; }
     } else {
       this._blinkTimer = 0;
+    }
+
+    // フィーバーの映像。点滅の 18Hz では動画がカクつくので、
+    // 流れている間だけ描き直しを速める (§3.3)
+    if (this.video && this.video.playing) {
+      this._videoTimer += dt;
+      if (this._videoTimer >= 1 / VID.fps) { this._videoTimer = 0; this._dirty = true; }
+    } else {
+      this._videoTimer = 0;
     }
 
     // カットイン・フリーズ・滑りは秒で進める

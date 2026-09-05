@@ -17,6 +17,7 @@ import { Kuruun } from './game/Kuruun.js';
 import { SlotMachine } from './game/SlotMachine.js';
 import { SlotDisplay } from './game/SlotDisplay.js';
 import { FeverMode } from './game/FeverMode.js';
+import { FeverVideo } from './game/FeverVideo.js';
 import { Jackpot } from './game/Jackpot.js';
 import { JackpotShow } from './game/JackpotShow.js';
 import { AntiJam } from './game/AntiJam.js';
@@ -159,6 +160,11 @@ async function main() {
       ui.setGame({ lastWinIndex: index, lastWinSeq: Date.now() })
     );
 
+    // フィーバー中の映像。液晶の背景として同じ canvas に焼き込む (§3.3)。
+    // 音は Sound の master を通るので、消音がそのまま効く
+    const feverVideo = new FeverVideo(sound);
+    slotDisplay.setVideo(feverVideo);
+
     const hopper = new Hopper(pool);
     const antiJam = new AntiJam(pool);
 
@@ -196,6 +202,10 @@ async function main() {
         steps: f.steps, stepsMax: f.stepsMax,
         feverLeft: f.active ? Math.ceil(f.left) : 0,
       }),
+      // 突入と終了で映像を出し入れする。JP 演出に台を明け渡すときも
+      // FeverMode 側が exit() を通るので、ここだけ見ていれば止まる
+      onEnter: () => feverVideo.play(),
+      onExit: () => feverVideo.stop(),
     });
     fever.steps = clampInt(saved && saved.steps, 0, 0, CFG.fever.stepsToEnter - 1);
     fever.onChange(fever);
@@ -370,7 +380,7 @@ async function main() {
       window.game = {
         CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
         launcher, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
-        wallet, ui, fever, jackpot, jpShow, kuruun,
+        wallet, ui, fever, jackpot, jpShow, kuruun, feverVideo,
       };
     }
   } catch (err) {

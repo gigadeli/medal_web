@@ -52,6 +52,31 @@ export class Sound {
     }
   }
 
+  /**
+   * `<video>` / `<audio>` の音を master に通す。
+   *
+   * 要素のまま鳴らすと消音 (M / SOUND ボタン) が効かない。master に繋げば
+   * 効果音と同じゲインを通るので、切り替えが1箇所で済む。
+   *
+   * createMediaElementSource は**1つの要素につき1回しか呼べない**。
+   * 呼んだ時点でその要素の音は WebAudio 側にしか出なくなる。
+   *
+   * @returns {GainNode|null} 音量調整用。WebAudio が使えなければ null
+   */
+  connectElement(el) {
+    this.resume();
+    if (!this.ctx) return null;
+    try {
+      const src = this.ctx.createMediaElementSource(el);
+      const gain = this.ctx.createGain();
+      src.connect(gain).connect(this.master);
+      return gain;
+    } catch (e) {
+      // 同じ要素で2回呼んだ / 実装が無い。音は要素側から出る
+      return null;
+    }
+  }
+
   /** セーブから復元するときなど、値を直接指定する */
   setMuted(v) {
     if (this.muted === !!v) return;
