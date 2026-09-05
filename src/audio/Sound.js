@@ -1,16 +1,29 @@
 import { CFG } from '../config.js';
-import { rnd } from '../core/Rng.js';
+import { rnd, rndInt } from '../core/Rng.js';
 
 /**
- * WebAudio で効果音をその場で合成する。音声ファイルは使わない。
+ * 効果音。ほとんどを WebAudio でその場で合成する。
  *
  * メダルの衝突音は「ノイズのアタック + 金属的な倍音の余韻」で作る。
  * 衝突の強さで音量・帯域・減衰が連続的に変わるので、
  * サンプルを数種類鳴らし分けるより自然な密度感になる。
  *
+ * 例外がフィールドの抽選ボールが落ちる音 (ballFall) で、ここだけ音声ファイル。
+ * 20秒に1回ほどしか鳴らない「見せ場」の音なので、密度ではなく1発の質が要る。
+ * 合成では作りにくい種類の音でもある。
+ *
  * AudioContext はユーザー操作がないと始動できないため、
  * 最初のクリック/キー入力で resume する。
  */
+
+/**
+ * 落球音。src/audio/ballFall/ に置いたぶんだけ自動で拾う。
+ * ファイルを足す/減らすだけで候補が増減し、コードは触らなくてよい。
+ */
+const BALL_FALL_URLS = Object.values(
+  import.meta.glob('./ballFall/*.mp3', { eager: true, query: '?url', import: 'default' })
+);
+
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -20,6 +33,10 @@ export class Sound {
     this._lastImpact = 0;
     this._frameVoices = 0;
     this._noise = null;
+    /** 落球音のデコード済みバッファ。読み込み前は空 */
+    this._ballFall = [];
+    this._ballFallLoading = false;
+    this._lastBallFall = -1;
 
     const unlock = () => this.resume();
     window.addEventListener('pointerdown', unlock);
@@ -45,6 +62,7 @@ export class Sound {
       this.master.gain.value = this.muted ? 0 : CFG.audio.masterVolume;
       this.master.connect(this.ctx.destination);
       this._noise = this._makeNoiseBuffer(0.25);
+      this._loadBallFall();
     }
     if (this.ctx.state === 'suspended') {
       const p = this.ctx.resume();
@@ -97,6 +115,52 @@ export class Sound {
     const d = buf.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = rnd() * 2 - 1;
     return buf;
+  }
+
+  /**
+   * 落球音を読み込む。resume() で AudioContext ができた直後に1回だけ。
+   *
+   * 起動時ではなく最初のユーザー操作で取りに行く。合計 453KB あり、
+   * 球が落ちるのはメダルを撃って盤面が動き出したあとなので、
+   * 初回の描画を待たせてまで先に取る意味がない。
+   *
+   * 間に合わなければ ballFall() が黙って何もしないだけで、
+   * 演出そのものは成立する (合成側の step / lose は鳴る)。
+   * file:// で開いた場合も fetch が通らないのでここに落ちる (映像の音と同じ)。
+   */
+  _loadBallFall() {
+    if (this._ballFallLoading || !this.ctx) return;
+    this._ballFallLoading = true;
+
+    for (const url of BALL_FALL_URLS) {
+      fetch(url)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
+        .then((buf) => this.ctx.decodeAudioData(buf))
+        .then((audio) => {
+          /*
+           * ピークを揃えてから配列に入れる。
+           *
+           * いま入っている14個はピークが 0.16〜0.59 (3.7倍) ばらついていて、
+           * そのまま混ぜると「同じ出来事の音違い」ではなく
+           * 「録り方がバラバラ」に聞こえる。RMS ではなくピークで揃えるのは、
+           * 余韻の長い素材を持ち上げすぎるとノイズまで上がってくるため。
+           * 持ち上げは4倍で頭打ち (いまの素材では最大 2.85倍で足りている)。
+           */
+          // 左右で音量が違う素材があるので、**全チャンネルの最大**を見る。
+          // 片チャンネルだけで測ると、その裏で大きいほうがそのまま出てくる
+          let peak = 0;
+          for (let c = 0; c < audio.numberOfChannels; c++) {
+            const d = audio.getChannelData(c);
+            for (let i = 0; i < d.length; i++) {
+              const v = Math.abs(d[i]);
+              if (v > peak) peak = v;
+            }
+          }
+          const gain = peak > 1e-4 ? Math.min(4, 0.45 / peak) : 1;
+          this._ballFall.push({ buffer: audio, gain });
+        })
+        .catch(() => { /* 1つ落ちても他が鳴ればよい */ });
+    }
   }
 
   /** 描画フレームの頭で呼ぶ。1フレームあたりの発音数をリセットする */
@@ -321,6 +385,34 @@ export class Sound {
   /** 球がリフトで持ち上がる */
   kuruunLift() {
     this._tone(220, 1.2, 'sine', 0.10, 0, 660);
+  }
+
+  /**
+   * フィールドの抽選ボールが落ちた (DESIGN.md §7.4)。
+   *
+   * 払い出し口でもサイドポケットでも同じで、**落ちたこと自体**の音。
+   * 当たり/ハズレを示すのは後続の step() / lose() のほう。
+   *
+   * 素材を毎回ランダムに選ぶ。直前と同じものは避ける。
+   * 球は3個あって続けて落ちることがあるので、
+   * 同じ音が並ぶとそこだけ機械的に聞こえる
+   */
+  ballFall() {
+    if (!this.ready) return;
+    const n = this._ballFall.length;
+    if (n === 0) return;
+
+    let i = rndInt(n);
+    if (n > 1 && i === this._lastBallFall) i = (i + 1 + rndInt(n - 1)) % n;
+    this._lastBallFall = i;
+
+    const s = this._ballFall[i];
+    const src = this.ctx.createBufferSource();
+    src.buffer = s.buffer;
+    const g = this.ctx.createGain();
+    g.gain.value = s.gain * CFG.audio.ballFallVolume;
+    src.connect(g).connect(this.master);
+    src.start(this.ctx.currentTime);
   }
 
   /** 皿に球が入った。段が上がるほど高く */

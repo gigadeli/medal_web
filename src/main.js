@@ -299,6 +299,10 @@ async function main() {
         // ボールが落ちたらフィーバーの STEP が進み、クルーンが回る
         // (サイドポケットはハズレ。どちらも起きない)
         const fell = balls.update(dt);
+        // 落球音。払い出し口でもサイドポケットでも「球が落ちた」ことは同じなので
+        // 同じ音を鳴らす。当たり/ハズレを示すのは後続の step() / lose() のほう。
+        // 同じステップで2個落ちても1回しか鳴らさない (重ねても濁るだけ)
+        if (fell.payout + fell.pocket > 0) sound.ballFall();
         for (const at of fell.at) {
           fever.addStep();
           kuruun.request(at);
@@ -432,11 +436,13 @@ function prefill(pool, count = CFG.save.defaultFieldStock) {
   const deckWant = Math.round(count * CFG.save.deckRatio);
   // 上段 (プッシャー上面) に山を作る。
   // 背面壁に接するところから隙間なく並べること。山が壁から途切れていると
-  // 「後退時に堰き止められる」連鎖が切れて、いつまでも前に進まない
-  const onDeck = grid(7, 4, deckWant, -5.4, 1.8, -1.8, 1.2, D + t);
+  // 「後退時に堰き止められる」連鎖が切れて、いつまでも前に進まない。
+  // デッキごと奥へ 1.0 下げてあるので、起点も -1.8 → -2.8
+  const onDeck = grid(7, 4, deckWant, -5.4, 1.8, -2.8, 1.2, D + t);
   // 下段にも敷いておく。ここが薄いと押しても縁まで届かず、いつまでも落ちない。
-  // 手前は勾配になっているので、めり込まないよう少し高めから落とす
-  grid(7, 3, count - onDeck, -5.4, 1.8, 2.8, 1.2, t + 0.3);
+  // 手前は勾配になっているので、めり込まないよう少し高めから落とす。
+  // 下段が奥へ 1.0 広がったので、奥に1列足して 3列 → 4列 (z: 1.6 / 2.8 / 4.0 / 5.2)
+  grid(7, 4, count - onDeck, -5.4, 1.8, 1.6, 1.2, t + 0.3);
 }
 
 main();

@@ -129,20 +129,21 @@ export class Cabinet {
       this.matGlow, { visualOnly: true }
     );
 
-    // 背面パネルの発光ライン (奥行き感)
+    // 背面パネルの発光ライン (奥行き感)。背面壁の内面 (z=-3.0) のすぐ手前
     for (let i = 0; i < 3; i++) {
       this._box(
-        { x: 0, y: 3.4 + i * 2.6, z: -1.94, w: 11.0, h: 0.1, d: 0.1 },
+        { x: 0, y: 3.4 + i * 2.6, z: -2.94, w: 11.0, h: 0.1, d: 0.1 },
         this.matGlow, { visualOnly: true }
       );
     }
 
-    // 筐体のベース。落下経路 (z > 2.6) には掛からないよう奥側だけに置く
+    // 筐体のベース。落下経路 (z > 2.6) には掛からないよう奥側だけに置く。
+    // 下段を奥へ広げたぶん奥行きも 7 → 8 (z: -5.5 .. 2.5)
     const base = new THREE.Mesh(
-      new THREE.BoxGeometry(17, 1.4, 7),
+      new THREE.BoxGeometry(17, 1.4, 8),
       new THREE.MeshStandardMaterial({ color: 0x0d1220, metalness: 0.4, roughness: 0.85 })
     );
-    base.position.set(0, -1.9, -1.0);
+    base.position.set(0, -1.9, -1.5);
     base.receiveShadow = true;
     this.group.add(base);
   }
