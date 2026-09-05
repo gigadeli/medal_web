@@ -19,8 +19,6 @@ import { SlotDisplay } from './game/SlotDisplay.js';
 import { FeverMode } from './game/FeverMode.js';
 import { Jackpot } from './game/Jackpot.js';
 import { JackpotShow } from './game/JackpotShow.js';
-import { Bump } from './game/Bump.js';
-import { SpecialMedals } from './game/SpecialMedals.js';
 import { AntiJam } from './game/AntiJam.js';
 import { Wallet } from './game/Wallet.js';
 import { SaveStore } from './save/SaveStore.js';
@@ -52,8 +50,8 @@ function clampInt(v, fallback, min, max) {
  * 各ギミックはお互いを知らず、コールバックだけを外に出している:
  *
  *   チャッカー → スロット / フリッパー / JP メーター
- *   ボール     → フィーバーの STEP
- *   ロスト     → JP メーター / チケット
+ *   ボール     → フィーバーの STEP / 3段クルーン
+ *   ロスト     → JP メーター
  *   青7        → JP 当選 → タワー演出
  */
 async function main() {
@@ -82,11 +80,7 @@ async function main() {
   if (saved) jackpot.restore(saved.jackpot);
 
   // 物理ができてから作るもの。UI のコールバックからは遅延参照する
-  let special = null;
-  let bump = null;
   let fever = null;
-  // 特殊メダルを選ぶと発射口の色が変わる。生成は物理ができてから
-  let launcher = null;
 
   // 場の枚数は物理ができてからでないと数えられないので、あとで差し替える
   let currentFieldStock = () => fieldStock;
@@ -98,7 +92,6 @@ async function main() {
     fieldStock: currentFieldStock(),
     settings: { muted: sound.muted },
     jackpot: jackpot.serialize(),
-    special: special ? special.serialize() : undefined,
     steps: fever ? fever.steps : 0,
     ...wallet.serialize(),
   });
@@ -112,12 +105,9 @@ async function main() {
       userId = SaveStore.newUserId();
       wallet.reset(true);
       jackpot.reset(true);
-      if (special) special.reset(true);
       if (fever) fever.reset();
       persist();               // 消した直後の状態を書き直す
     },
-    onSelectSpecial: (kind) => special && special.select(kind),
-    onBump: () => bump && bump.hit(),
     // 保存は描画ループ側の lastMuted の比較が拾う (M キーと同じ経路)
     onToggleMute: () => sound.toggleMute(),
   });
@@ -178,27 +168,6 @@ async function main() {
     // 増えるのは降ってきたメダルが押し出されて落ちたときで、それは Payout が拾う
     const kuruun = new Kuruun(stage.scene, { hopper, sound });
 
-    special = new SpecialMedals({
-      pool, sound,
-      onChange: (s) => {
-        ui.setGame({
-          gold: s.stock.gold, bomb: s.stock.bomb, ticket: s.stock.ticket,
-          selected: s.selected || '',
-        });
-        // 次に撃つ1枚が何かを発射口の色で見せる (HUD だけだと手元から目が離れる)
-        if (launcher) {
-          const kind = s.selected && CFG.special.kinds[s.selected];
-          launcher.setMarkerColor(kind ? kind.color : 0x5cc8ff);
-        }
-      },
-    });
-    if (saved) special.restore(saved.special);
-
-    bump = new Bump({
-      pool, sound, stage,
-      onChange: (b) => ui.setGame({ bumpCooldown: b.cooldown, tilt: b.tilt }),
-    });
-
     const jpShow = new JackpotShow({
       pusher, pool, hopper, world, sound,
       onPhase: (s) => {
@@ -213,11 +182,7 @@ async function main() {
       hopper,
       sound,
       present: (res) => slotDisplay.play(res),
-      onDraw: (res) => {
-        wallet.recordSpin(res);
-        // リプレイ役でゴールドメダルを1枚配る (§3.7)
-        if (res.symbol.id === 'replay') special.grant('gold');
-      },
+      onDraw: (res) => wallet.recordSpin(res),
       onJackpot: () => {
         const won = jackpot.claim();
         wallet.recordJackpot(won);
@@ -231,31 +196,24 @@ async function main() {
         steps: f.steps, stepsMax: f.stepsMax,
         feverLeft: f.active ? Math.ceil(f.left) : 0,
       }),
-      // フィーバーを抜けたらボムを1枚。次の詰まりを自分で崩せる
-      onExit: () => special.grant('bomb'),
     });
     fever.steps = clampInt(saved && saved.steps, 0, 0, CFG.fever.stepsToEnter - 1);
     fever.onChange(fever);
 
     let lastGainPop = -1;
     const payout = new Payout(pool, {
-      onGain: (medal) => {
-        // 特殊メダルはここで効果に変わる。ゴールドなら1枚が5枚になる
-        const extra = special.resolveDrop(medal);
-        const gain = 1 + extra.credit;
-        wallet.earn(gain);
-        if (extra.spin) slot.request();
+      onGain: () => {
+        wallet.earn(1);
         sound.payout();
         if (loop.simTime - lastGainPop >= GAIN_POP_INTERVAL) {
           lastGainPop = loop.simTime;
-          ui.popGain(gain);
+          ui.popGain(1);
         }
       },
       onLost: () => {
         wallet.recordLost(1);
-        // 損を期待に変える2本の線 (§3.4 / §3.7)
+        // 損を期待に変える線 (§3.4)。ロストがそのまま JP の燃料になる
         jackpot.onLost(1);
-        special.onLost(1);
       },
       onChucker: (chuckerSlot) => {
         if (chuckerSlot.kind === 'start') {
@@ -270,14 +228,11 @@ async function main() {
 
     // 手前の発射口から上段デッキへ撃ち上げる (DESIGN.md §7.2)。
     // 狙いは自動で首を振るので、プレイヤーが決めるのは撃つ瞬間だけ
-    launcher = new Launcher(stage.scene, stage.renderer.domElement, pool, {
-      // TILT 中は投入できない (§3.8)
-      canInsert: () => wallet.canInsert() && bump.tilt <= 0,
-      getSpawnOptions: () => special.takeSpawnOptions(),
-      onInsert: (medal) => {
+    const launcher = new Launcher(stage.scene, stage.renderer.domElement, pool, {
+      canInsert: () => wallet.canInsert(),
+      onInsert: () => {
         wallet.spend(1);
         jackpot.onInsert(1);
-        special.track(medal);
       },
     });
 
@@ -291,16 +246,13 @@ async function main() {
       const { Debug } = await import('./ui/Debug.js');
       debug = new Debug({
         scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
-        pusher, table, fever, jackpot, jpShow, special, bump, chute, kuruun,
+        pusher, table, fever, jackpot, jpShow, chute, kuruun,
       });
     }
 
     prefill(pool, fieldStock);
     currentFieldStock = () => pool.activeCount;
     ui.setGame({ holdMax: CFG.slot.maxQueue });
-
-    // 台パンのカメラ揺れは OrbitControls の後に入れないと打ち消される
-    stage.onBeforeRender = () => bump.syncCamera(loop.lastRealDt || 0);
 
     let statsTimer = 0;
     let lastMuted = sound.muted;
@@ -310,8 +262,6 @@ async function main() {
       (dt) => {
         launcher.update(dt);
         hopper.update(dt);
-        special.update(dt);        // ボムの導火線
-        bump.update(dt);
 
         // キネマティックな部品は world.step() の前に「次の位置」を与える
         chute.update(dt);
@@ -355,7 +305,6 @@ async function main() {
       (alpha, realDt) => {
         debug.beginFrame();
         sound.beginFrame();
-        loop.lastRealDt = realDt;
 
         pusher.syncMesh(alpha);
         table.syncMesh();
@@ -376,7 +325,6 @@ async function main() {
           steps: fever.steps,
           stepsMax: fever.stepsMax,
           fever: fever.active ? fever.left : 0,
-          tilt: bump.tilt,
         });
 
         stage.render();
@@ -422,7 +370,7 @@ async function main() {
       window.game = {
         CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
         launcher, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
-        wallet, ui, fever, jackpot, jpShow, bump, special, kuruun,
+        wallet, ui, fever, jackpot, jpShow, kuruun,
       };
     }
   } catch (err) {

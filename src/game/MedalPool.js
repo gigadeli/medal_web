@@ -11,7 +11,6 @@ const _quat = new THREE.Quaternion();
 const _scale = new THREE.Vector3(1, 1, 1);
 const _mat4 = new THREE.Matrix4();
 const _euler = new THREE.Euler();
-const _color = new THREE.Color();
 
 /**
  * メダルの剛体プール + InstancedMesh (DESIGN.md §6.3 / §6.4)
@@ -31,10 +30,11 @@ export class MedalPool {
     const geo = new THREE.CylinderGeometry(
       M.radius, M.radius, M.thickness, QUALITY.medalSegments
     );
-    // 色は instanceColor 側で持つので、マテリアルは白にしておく。
-    // 特殊メダル (DESIGN_GIMMICKS.md §3.7) はこの1枚のマテリアルのまま色だけ変える
+    // 全部同じ色なので、色はマテリアルが1つ持てば足りる。
+    // 以前は特殊メダルのために instanceColor を持ち、場に特殊メダルが居る間は
+    // 毎フレーム 585枚ぶんの色を書き直していた。役目が無くなったので外してある
     const mat = new THREE.MeshStandardMaterial({
-      color: 0xffffff,
+      color: M.color,
       metalness: M.metalness,
       roughness: M.roughness,
       envMapIntensity: 1.2,
@@ -47,19 +47,6 @@ export class MedalPool {
     this.mesh.frustumCulled = false; // 個々の位置がバラバラなので全体で判定させない
     this.mesh.count = 0;
     scene.add(this.mesh);
-
-    // 通常メダルの色。instanceColor は active 配列の並び順に書くので、
-    // 回収で並びが変わる以上、特殊メダルが場に居る間は毎フレーム書き直す必要がある
-    this.baseColor = new THREE.Color(M.color);
-    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
-      new Float32Array(M.maxCount * 3), 3
-    );
-    this.mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
-    for (let i = 0; i < M.maxCount; i++) this.mesh.setColorAt(i, this.baseColor);
-    this.mesh.instanceColor.needsUpdate = true;
-    /** 場に特殊メダルが1枚も居なければ色の書き込みを丸ごと省く */
-    this.specialCount = 0;
-    this._colorDirty = false;
 
     this.items = [];
     this.active = [];
@@ -114,12 +101,6 @@ export class MedalPool {
       prevQ: new THREE.Quaternion(),
       currQ: new THREE.Quaternion(),
       counted: false,
-      /** 場に出ているか。特殊メダルの追跡側が寿命を判定するのに使う */
-      live: false,
-      /** 特殊メダル (DESIGN_GIMMICKS.md §3.7)。null なら通常メダル */
-      kind: null,
-      color: null,
-      fuse: 0,
       parkX: (index % 20) * 3 - 30,
       parkZ: Math.floor(index / 20) * 3,
     };
@@ -134,18 +115,6 @@ export class MedalPool {
     m.body.setAngvel({ x: 0, y: 0, z: 0 }, false);
     m.body.sleep();
     m.counted = false;
-    m.live = false;
-    this.clearKind(m);
-  }
-
-  /** 特殊メダルを通常メダルに戻す (ボムが爆発したとき / 回収したとき) */
-  clearKind(m) {
-    if (!m.kind) return;
-    m.kind = null;
-    m.color = null;
-    m.fuse = 0;
-    if (this.specialCount > 0) this.specialCount--;
-    this._colorDirty = true;
   }
 
   get activeCount() { return this.active.length; }
@@ -153,7 +122,7 @@ export class MedalPool {
 
   /**
    * メダルを1枚投入する。
-   * @param {object} [opts] kind: 特殊メダルの種類 / flat: 傾けずに置く (タワー建設用)
+   * @param {object} [opts] flat: 傾けずに置く (タワー建設用)
    *   / vel: 初速 / angvel: 初期の角速度 (どちらも発射式の投入で使う)
    * @returns {object|null} 投入したメダル。満杯なら null
    */
@@ -191,15 +160,6 @@ export class MedalPool {
     }
     m.body.wakeUp();
     m.counted = false;
-    m.live = true;
-
-    if (opts && opts.kind) {
-      m.kind = opts.kind;
-      m.color = opts.color;
-      m.fuse = opts.fuse || 0;
-      this.specialCount++;
-      this._colorDirty = true;
-    }
 
     m.currP.set(x, y, z);
     m.prevP.copy(m.currP);
@@ -248,28 +208,15 @@ export class MedalPool {
   /** 描画。prev と curr を alpha で補間して InstancedMesh に流し込む */
   sync(alpha) {
     const n = this.active.length;
-    // 特殊メダルが1枚でも場に居ると、回収のたびに並びが変わるので色を書き直す。
-    // 1枚も居なければ全部が既定色のままなので、書き込みごと省略できる
-    const paint = this.specialCount > 0 || this._colorDirty;
-
     for (let i = 0; i < n; i++) {
       const m = this.active[i];
       _pos.copy(m.prevP).lerp(m.currP, alpha);
       _quat.copy(m.prevQ).slerp(m.currQ, alpha);
       _mat4.compose(_pos, _quat, _scale);
       this.mesh.setMatrixAt(i, _mat4);
-      if (paint) {
-        if (m.color !== null && m.color !== undefined) _color.setHex(m.color);
-        else _color.copy(this.baseColor);
-        this.mesh.setColorAt(i, _color);
-      }
     }
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
-    if (paint) {
-      this.mesh.instanceColor.needsUpdate = true;
-      this._colorDirty = false;
-    }
   }
 
   /** デバッグ用: 全部片付ける */

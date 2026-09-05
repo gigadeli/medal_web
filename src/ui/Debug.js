@@ -11,7 +11,7 @@ import { CFG } from '../config.js';
  */
 export class Debug {
   constructor({ scene, world, pool, stage, payout, slot, hopper, balls,
-                pusher, table, fever, jackpot, jpShow, special, bump, chute, kuruun }) {
+                pusher, table, fever, jackpot, jpShow, chute, kuruun }) {
     this.world = world;
     this.pool = pool;
     this.stage = stage;
@@ -24,8 +24,6 @@ export class Debug {
     this.fever = fever;
     this.jackpot = jackpot;
     this.jpShow = jpShow;
-    this.special = special;
-    this.bump = bump;
     this.chute = chute;
     this.kuruun = kuruun;
     this.enabled = false;
@@ -103,7 +101,6 @@ export class Debug {
     fGim.add(this, 'fireJackpot').name('ジャックポットを撃つ');
     fGim.add(this, 'fillJackpot').name('JPを上限まで溜める');
     fGim.add(CFG.jackpot, 'towerLimit', 20, 400, 10).name('タワーの上限枚数');
-    fGim.add(this, 'grantAll').name('特殊メダルを配る');
     fGim.add(this, 'openFlippers').name('フリッパーを開く');
     fGim.add(this, 'chuckerReport').name('チャッカーの入賞数をログ');
 
@@ -155,11 +152,6 @@ export class Debug {
     if (!this.jackpot) return;
     this.jackpot.amount = CFG.jackpot.max;
     this.jackpot.onChange(this.jackpot);
-  };
-
-  grantAll = () => {
-    if (!this.special) return;
-    for (const k of ['gold', 'bomb', 'ticket']) this.special.grant(k, CFG.special.max);
   };
 
   openFlippers = () => this.chute && this.chute.triggerFlippers();

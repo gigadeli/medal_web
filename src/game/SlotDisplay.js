@@ -122,7 +122,6 @@ export class SlotDisplay {
       steps: 0,
       stepsMax: CFG.fever.stepsToEnter,
       fever: 0,                // 残り秒。0 なら通常
-      tilt: 0,
     };
     this._spinTimer = 0;
     this._blinkTimer = 0;
@@ -264,8 +263,7 @@ export class SlotDisplay {
     c.fillStyle = fever ? '#ffb03a'
       : (s.heat > 0 && s.playing ? heatColor : (s.tone === 'big' ? '#ffcf5c' : '#8ea0c0'));
     c.letterSpacing = '9px';
-    const label = m.tilt > 0 ? `TILT ${Math.ceil(m.tilt)}`
-      : fever ? `FEVER ${Math.ceil(m.fever)}` : s.label;
+    const label = fever ? `FEVER ${Math.ceil(m.fever)}` : s.label;
     c.fillText(label, TEX_W / 2, 26);
     c.letterSpacing = '0px';
   }

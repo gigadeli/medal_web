@@ -717,36 +717,6 @@ export const CFG = {
     speed: 2.4,            // rad/s
   },
 
-  /**
-   * 台パン (DESIGN_GIMMICKS.md §3.8)
-   * AntiJam が自動でやっていることを、プレイヤーの意思で撃てるようにしたもの。
-   */
-  bump: {
-    cooldown: 20.0,        // 秒
-    impulse: 0.9,          // メダル1枚あたり
-    tiltUses: 3,           // クールダウン中に叩いた回数がこれを超えると TILT
-    tiltSeconds: 10.0,     // TILT 中は投入できない
-    shake: 0.22,           // カメラの揺れ幅
-  },
-
-  /**
-   * 特殊メダル (DESIGN_GIMMICKS.md §3.7)
-   * 剛体もマテリアルも増やさない。InstancedMesh の頂点色を差し替えるだけ。
-   */
-  special: {
-    enabled: true,
-    max: 3,                // 種類ごとの手持ち上限
-    lostPerTicket: 50,     // ロストがこの枚数たまるとチケットを1枚
-    kinds: {
-      // 払い出し口に落ちると pay 枚ぶんになる
-      gold:   { color: 0xffc84a, pay: 5 },
-      // 着弾から delay 秒後に周囲を吹き飛ばす。詰まりを自分で崩せる
-      bomb:   { color: 0xff5566, delay: 0.7, radius: 3.0, impulse: 2.2 },
-      // 落ちるとチャッカーを通さずスロットが1回まわる
-      ticket: { color: 0xeaf2ff, pay: 1 },
-    },
-  },
-
   /** ホッパー: 当たり分をまとめて降らせる装置 */
   hopper: {
     // 残数が多いほど速く吐く。ジャックポットの数百枚を定速で出すと

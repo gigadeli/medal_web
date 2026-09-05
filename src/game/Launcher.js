@@ -27,11 +27,9 @@ export class Launcher {
   constructor(scene, domElement, pool, hooks = {}) {
     this.dom = domElement;
     this.pool = pool;
-    // 持ち枚数が尽きていれば撃たせない。TILT 中もここで止める
+    // 持ち枚数が尽きていれば撃たせない
     this.canInsert = hooks.canInsert || (() => true);
     this.onInsert = hooks.onInsert || (() => {});
-    // 特殊メダル (DESIGN_GIMMICKS.md §3.7)。null を返せば通常メダル
-    this.getSpawnOptions = hooks.getSpawnOptions || (() => null);
 
     this.yaw = 0;
     this.phase = 0;
@@ -88,7 +86,7 @@ export class Launcher {
     tube.position.set(0, Math.sin(P.elevation) * P.barrel * 0.5, -Math.cos(P.elevation) * P.barrel * 0.5);
     this.barrel.add(tube);
 
-    // 砲口の光るリング。特殊メダルを選ぶと色が変わる
+    // 砲口の光るリング
     const muzzle = new THREE.Mesh(
       new THREE.TorusGeometry(0.22, 0.05, 8, 20), this.matGlow
     );
@@ -186,8 +184,7 @@ export class Launcher {
 
     this.cooldown -= dt;
     if ((this.pending || this.holding) && this.cooldown <= 0) {
-      // 空きの確認を先に済ませる。特殊メダルの手持ちを減らしてから
-      // 満杯で弾かれると、1枚が黙って消えることになる
+      // プールの空きも先に見る。満杯のまま撃つと持ち枚数だけ減る
       if (this.canInsert() && this.pool.freeCount > 0) this._fire();
       this.pending = false;
     }
@@ -196,29 +193,18 @@ export class Launcher {
   _fire() {
     const dir = aimVector(this.yaw);
     const from = dir.clone().multiplyScalar(P.barrel).add(this.group.position);
-    const opts = Object.assign({}, this.getSpawnOptions(), {
+    const medal = this.pool.spawn(from.x, from.y, from.z, {
       vel: {
         x: dir.x * this.speed,
         y: dir.y * this.speed,
         z: dir.z * this.speed,
       },
     });
-
-    const medal = this.pool.spawn(from.x, from.y, from.z, opts);
     if (!medal) return;
     this.inserted++;
     this.cooldown = CFG.input.dropCooldown;
     this._recoil = 1;
     this.onInsert(medal);
-  }
-
-  /** 特殊メダルを選んでいる間は砲口と着地リングの色を変える */
-  setMarkerColor(hex) {
-    if (this._markerColor === hex) return;
-    this._markerColor = hex;
-    this.ringMat.color.setHex(hex);
-    this.matGlow.emissive.setHex(hex);
-    this.guideMat.color.setHex(hex);
   }
 
   syncMesh() {

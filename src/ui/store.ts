@@ -82,14 +82,6 @@ export type GameState = {
   jp: number;
   /** ジャックポット演出の段階。'' なら演出していない (§3.5) */
   jpPhase: string;
-  /** 特殊メダルの手持ちと、次の1枚に載せる種類 (§3.7) */
-  gold: number;
-  bomb: number;
-  ticket: number;
-  selected: string;
-  /** 台パン (§3.8)。cooldown が 0 なら撃てる。tilt > 0 は投入不可 */
-  bumpCooldown: number;
-  tilt: number;
 };
 
 export type StatsState = {
@@ -122,12 +114,6 @@ export const gameStore = new Store<GameState>({
   feverLeft: 0,
   jp: 0,
   jpPhase: '',
-  gold: 0,
-  bomb: 0,
-  ticket: 0,
-  selected: '',
-  bumpCooldown: 0,
-  tilt: 0,
 });
 
 export const statsStore = new Store<StatsState>({

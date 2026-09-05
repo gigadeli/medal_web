@@ -279,59 +279,6 @@ export class Sound {
     this._tone(90, 1.4, 'sawtooth', 0.20, 0, 260);
   }
 
-  /** 台パン */
-  bump() {
-    if (!this.ready) return;
-    const t = this.ctx.currentTime;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this._noise;
-    src.playbackRate.value = 0.4;
-    const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 420;
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.7, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
-    src.connect(lp).connect(g).connect(this.master);
-    src.start(t);
-    src.stop(t + 0.3);
-    this._tone(70, 0.25, 'sine', 0.35, 0, 40);
-  }
-
-  /** 効かない操作 */
-  tick() {
-    this._tone(200, 0.05, 'square', 0.09);
-  }
-
-  /** TILT */
-  tiltAlarm() {
-    for (let i = 0; i < 4; i++) this._tone(i % 2 ? 300 : 460, 0.14, 'square', 0.26, i * 0.16);
-  }
-
-  /** 特殊メダルを入手した */
-  grant() {
-    this._tone(1046.5, 0.10, 'triangle', 0.20);
-    this._tone(1568, 0.20, 'sine', 0.16, 0.07);
-  }
-
-  /** ボムが爆発した */
-  explode() {
-    if (!this.ready) return;
-    const t = this.ctx.currentTime;
-    const src = this.ctx.createBufferSource();
-    src.buffer = this._noise;
-    src.playbackRate.value = 0.55;
-    const lp = this.ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.setValueAtTime(2600, t);
-    lp.frequency.exponentialRampToValueAtTime(220, t + 0.35);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.6, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-    src.connect(lp).connect(g).connect(this.master);
-    src.start(t);
-    src.stop(t + 0.42);
-  }
 
   /** ジャックポット */
   jackpot() {

@@ -126,13 +126,15 @@
  * 落とすのは表題と早見図だけ。絵柄・枚数・倍率・保留ランプは
  * 「いま何が当たると何枚か / 何回ぶん溜まっているか」という判断材料なので残す。
  * 横持ちでは画面が低いだけなので、既存の max-height 用の段組みに任せる。
+ *
+ * 下端から: 操作説明 / SOUND (8px〜) → この帯 (46px〜)。
  * ------------------------------------------------------------------ */
 @media (orientation: portrait) {
   :global(html[data-device='mobile']) .panel {
     top: auto; width: auto;
     left: calc(8px + env(safe-area-inset-left));
     right: calc(8px + env(safe-area-inset-right));
-    bottom: calc(118px + env(safe-area-inset-bottom));
+    bottom: calc(46px + env(safe-area-inset-bottom));
     display: flex; align-items: center; gap: 8px;
     padding: 5px 8px;
   }
