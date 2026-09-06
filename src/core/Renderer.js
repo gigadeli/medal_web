@@ -14,12 +14,6 @@ const DEG = Math.PI / 180;
  * ゲームの規則に関わるものは何も持っていないので、ここを削っても
  * PC とモバイルで台の挙動は変わらない (core/Device.js を参照)。
  */
-/**
- * 上描き用のレイヤー。液晶の裏に隠れてしまう役物を、もう一度手前に描くのに使う
- * (Stage.setOverlay / DESIGN_GIMMICKS.md §3.12)
- */
-const OVERLAY_LAYER = 1;
-
 export class Stage {
   constructor(container) {
     const R = CFG.render;
@@ -70,9 +64,6 @@ export class Stage {
     this.controls.update();
 
     this._setupLights();
-
-    // 液晶の上に描き直すもの (Stage.setOverlay)。無い間は2回目のパスごと省く
-    this.overlay = null;
     this._setupEnvironment();
 
     this._w = 0;
@@ -316,53 +307,7 @@ export class Stage {
     // 揺らしたいものはこの後に入れないと打ち消される (台パンのカメラ揺れ)
     if (this.onBeforeRender) this.onBeforeRender();
     this.renderer.render(this.scene, this.camera);
-    this._drawOverlay();
     this._adapt(performance.now());
-  }
-
-  /**
-   * 「液晶より奥にあるのに、液晶の上に描きたいもの」を登録する
-   * (DESIGN_GIMMICKS.md §3.12)
-   *
-   * カメラ (0,11,22) から見ると、液晶 (z=6.1 / x±3.7 / y 4.97〜8.81) は
-   * 盤面の上空をごっそり覆っている。**弾道の頂点 (y 5.0 / z 1.8) は完全に裏**で、
-   * そこに浮かべた役物は1ピクセルも見えない (実測)。
-   * かといって見える場所 (弾道の手前 20%) は発射口のすぐ先で、
-   * そこに置くと首がどこを向いていても当たる = 狙う意味が消える。
-   *
-   * そこで、登録したものだけを**深度を捨てたうえでもう一度描く**。
-   * ・自分自身の前後関係は保たれる (深度テストを切るのとは違う)
-   * ・本描画にも出るので、ガラスの transmission の背景にもちゃんと映る
-   * ・明かりは両方のパスで要るので、シーン中の光源にも同じレイヤーを足す
-   *   (three.js は光源もレイヤーで絞り込む。足さないと2回目が真っ暗になる)
-   *
-   * 描くものが無い間は2回目のパスごと省くので、常時の負荷はほぼ無い。
-   * 【実測】出ている間の負荷は +1.4ms (場内310枚)。
-   *
-   * 光源にレイヤーを足すのはこの場で一度きりなので、**シーンの明かりが
-   * 揃ってから**呼ぶこと (いまは役物を全部組んだ後に main.js から呼んでいる)。
-   */
-  setOverlay(root) {
-    this.overlay = root;
-    root.traverse((o) => o.layers.enable(OVERLAY_LAYER));
-    this.scene.traverse((o) => { if (o.isLight) o.layers.enable(OVERLAY_LAYER); });
-  }
-
-  _drawOverlay() {
-    if (!this.overlay || !this.overlay.visible) return;
-    const r = this.renderer;
-    // 【罠】scene.background が Color だと、three.js は autoClear を無視して
-    // **色バッファごと消す** (WebGLBackground の forceClear)。
-    // 外さずに2回目を描くと、盤面が全部消えて UFO だけが浮かぶ (実測)
-    const bg = this.scene.background;
-    this.scene.background = null;
-    r.autoClear = false;
-    r.clearDepth();
-    this.camera.layers.set(OVERLAY_LAYER);
-    r.render(this.scene, this.camera);
-    this.camera.layers.set(0);
-    r.autoClear = true;
-    this.scene.background = bg;
   }
 
   dispose() {

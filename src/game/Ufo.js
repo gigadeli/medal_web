@@ -95,9 +95,9 @@ export class Ufo {
 
     const R = U.radius;
 
-    // **透過マテリアルを使わないこと**。手前のガラス (transmission) は
-    // その裏側を別パスで描き直して合成する仕組みで、そのパスには透過物が入らない。
-    // 半透明にした光の輪やビームは、ガラス越しに丸ごと消える (Kuruun.js と同じ理由)
+    // 不透明のまま組む。手前のガラスは外してあるので透過を使っても消えないが、
+    // 半透明の光の輪やビームは盤面の山と重なると輪郭が溶けて、
+    // 「あと何発か」を見せるランプが読めなくなる
     this.matHull = new THREE.MeshStandardMaterial({
       color: 0x9aa8c4, metalness: 0.92, roughness: 0.24,
     });

@@ -227,10 +227,10 @@ export class Kuruun {
       color: 0x8e9ab2, metalness: 0.9, roughness: 0.28,
     });
     // 管は**不透明の裏面だけ**を描く。
-    // 手前のガラス (MeshPhysicalMaterial の transmission) は、その裏側を
-    // 別パスで描き直して合成する仕組みで、**そのパスには透過マテリアルが入らない**。
-    // 役物を筐体の中に入れた時点で、半透明の管も球もガラス越しに消えてしまう。
-    // 裏面だけの不透明マテリアルなら、樋のように見えて中の球も隠れない
+    // もとは手前のガラス (transmission) 対策だった。あのパスには透過マテリアルが
+    // 入らないので、半透明の管は筐体の中に入れた時点で消えていた。
+    // ガラスは描画コストのために外した (game/Cabinet.js) ので制約は無くなったが、
+    // 裏面だけの不透明マテリアルは「樋」としてそのまま見た目が良いので残してある
     this.matTube = new THREE.MeshStandardMaterial({
       color: 0x243350, metalness: 0.2, roughness: 0.75, side: THREE.BackSide,
     });
@@ -359,8 +359,8 @@ export class Kuruun {
 
   _buildBall() {
     // 皿より小さいものを追いかけてもらうので、球はしっかり光らせる。
-    // **透過にしてはいけない** (ガラスの transmission のパスから外れて消える)。
-    // 消えるときは不透明のまま縮める
+    // 消えるときは不透明のまま縮める (もとはガラスの transmission 対策。
+    // ガラスは外したが、縮んで消えるほうが役物らしいので残してある)
     this.ballMat = new THREE.MeshStandardMaterial({
       color: 0x2b4e63,
       emissive: BALL.color,

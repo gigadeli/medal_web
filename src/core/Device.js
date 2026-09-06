@@ -60,7 +60,6 @@ export const IS_MOBILE = FORCED
  *
  *   shadows           影マップ 2048 の追加パス。投影する物が多く、いちばん重い
  *   antialias         MSAA。GPU 帯域を素直に食う。解像度を下げるほうが効く
- *   glassTransmission 手前のガラスの屈折。**シーンをもう一度描く**ので実質2倍
  *   medalSegments     円柱の分割 24 → 12。585枚ぶんの三角形が半分になる
  *   maxPixelRatio     iPhone の DPR は 3。等倍で描くと画素数が9倍になる
  *   lcdScale          液晶のテクスチャ。1024x501 は電話の画面には過剰で、
@@ -72,7 +71,6 @@ export const QUALITY = IS_MOBILE
   ? {
       shadows: false,
       antialias: false,
-      glassTransmission: false,
       medalSegments: 12,
       lcdScale: 0.625,       // 1024x501 → 640x313 (アップロード量は 2.6分の1)
       videoFps: 24,
@@ -85,7 +83,6 @@ export const QUALITY = IS_MOBILE
   : {
       shadows: true,
       antialias: true,
-      glassTransmission: true,
       medalSegments: CFG.medal.segments,
       lcdScale: 1,
       videoFps: CFG.fever.video.fps,

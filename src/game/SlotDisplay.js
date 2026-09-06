@@ -180,9 +180,11 @@ export class SlotDisplay {
       [-D.width / 2 - t / 2, 0, t, D.height],
       [D.width / 2 + t / 2, 0, t, D.height],
     ];
+    // ベゼルは画面より**手前**に出す。液晶を背面壁の内面に貼ったので、
+    // 奥に出すと枠が壁にめり込む (実機の「少し奥まった画面」の見え方にもなる)
     for (const [x, y, w, h] of frames) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.16), this.bezelMat);
-      bar.position.set(x, y, -0.05);
+      bar.position.set(x, y, 0.08);
       this.group.add(bar);
     }
 

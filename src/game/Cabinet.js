@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { CFG } from '../config.js';
-import { QUALITY } from '../core/Device.js';
 import { createFixedBox } from '../physics/World.js';
 
 const L = CFG.layout;
@@ -39,29 +38,6 @@ export class Cabinet {
     this.matFrame = new THREE.MeshStandardMaterial({
       color: 0x9aa6bd, metalness: 0.9, roughness: 0.25,
     });
-    /*
-     * 手前のガラス。
-     *
-     * transmission は「裏側の景色をもう一度描いたもの」を合成する。
-     * つまり **シーンを毎フレーム2回描く**ことになり、モバイルでは
-     * これ1枚のために描画時間が倍近くになる。
-     * 端末が非力なときは屈折を諦めて、ただの半透明板にする (見た目だけの差)。
-     *
-     * ついでに、透過の落とし穴もここで消える。transmission のパスには
-     * transparent: true のものが入らないので、ガラスの裏に置いた半透明の物は
-     * 描かれない (DESIGN_GIMMICKS.md §3.11 の実測)。屈折を切った側では
-     * その制約が無いが、両方で同じに見えるよう役物側は不透明のままにしてある。
-     */
-    this.matGlass = QUALITY.glassTransmission
-      ? new THREE.MeshPhysicalMaterial({
-          color: 0xbcd4ff, metalness: 0, roughness: 0.03,
-          transmission: 0.9, thickness: 0.4, ior: 1.45,
-          transparent: true, opacity: 0.25, side: THREE.DoubleSide,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: 0xbcd4ff, metalness: 0.1, roughness: 0.06,
-          transparent: true, opacity: 0.13, side: THREE.DoubleSide,
-        });
     this.matGlow = new THREE.MeshStandardMaterial({
       color: 0x1a2436, emissive: 0xffb03a, emissiveIntensity: 1.4, roughness: 0.5,
     });
@@ -98,10 +74,24 @@ export class Cabinet {
     this._box(L.wallLeft, this.matWall, { friction: 0.2 });
     this._box(L.wallRight, this.matWall, { friction: 0.2 });
 
-    // 手前のガラス。下端 y=1.5 より下は開口になっていて、そこが払い出し口
-    const glass = this._box(L.glass, this.matGlass, { friction: 0.1, restitution: 0.05 });
-    glass.castShadow = false;
-    glass.receiveShadow = false;
+    /*
+     * 手前の見えない壁。下端 y=1.5 より下は開口で、そこが払い出し口。
+     *
+     * ここには以前ガラス (MeshPhysicalMaterial の transmission) が貼ってあった。
+     * transmission は「裏側の景色をもう一度描いたもの」を合成する仕組みで、
+     * つまり **シーンを毎フレーム2回描く**。この1枚のために描画時間が倍近くになる。
+     * 見た目ごと外して、コライダーだけを残してある。
+     *
+     * 壁自体は外せない。山や UFO から手前へ弾かれたメダルが筐体の外へ抜ける。
+     *
+     * ガラスを外したことで、透過の落とし穴も無くなった:
+     * transmission のパスには transparent: true のものが入らないので、
+     * 以前はガラスの裏に置いた半透明の物が丸ごと消えていた (§3.11 の実測)。
+     * 役物側は不透明のままにしてあるが、それは見た目としてそう決めただけで、
+     * もう制約ではない。
+     */
+    const front = this._box(L.frontGuard, this.matWall, { friction: 0.1, restitution: 0.05 });
+    front.visible = false;
 
     // 不可視の天井。弾かれたメダルの脱走を防ぐ
     const ceil = this._box(L.ceiling, this.matWall, { friction: 0.1 });
@@ -129,13 +119,13 @@ export class Cabinet {
       this.matGlow, { visualOnly: true }
     );
 
-    // 背面パネルの発光ライン (奥行き感)。背面壁の内面 (z=-3.0) のすぐ手前
-    for (let i = 0; i < 3; i++) {
-      this._box(
-        { x: 0, y: 3.4 + i * 2.6, z: -2.94, w: 11.0, h: 0.1, d: 0.1 },
-        this.matGlow, { visualOnly: true }
-      );
-    }
+    // 背面パネルの発光ライン。背面壁の内面 (z=-3.0) のすぐ手前。
+    // 液晶を背面に移したので、その**下だけ**に1本。
+    // 液晶はベゼル込みで y 2.64〜7.97 を占めていて、上は画角の外に出る
+    this._box(
+      { x: 0, y: 2.30, z: -2.97, w: 12.4, h: 0.1, d: 0.1 },
+      this.matGlow, { visualOnly: true }
+    );
 
     // 筐体のベース。落下経路 (z > 2.6) には掛からないよう奥側だけに置く。
     // 下段を奥へ広げたぶん奥行きも 7 → 8 (z: -5.5 .. 2.5)
