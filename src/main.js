@@ -14,6 +14,7 @@ import { Payout } from './game/Payout.js';
 import { Hopper } from './game/Hopper.js';
 import { LotteryBallSet } from './game/LotteryBall.js';
 import { Kuruun } from './game/Kuruun.js';
+import { Ufo } from './game/Ufo.js';
 import { SlotMachine } from './game/SlotMachine.js';
 import { SlotDisplay } from './game/SlotDisplay.js';
 import { FeverMode } from './game/FeverMode.js';
@@ -54,6 +55,7 @@ function clampInt(v, fallback, min, max) {
  *   ボール     → フィーバーの STEP / 3段クルーン
  *   ロスト     → JP メーター
  *   青7        → JP 当選 → タワー演出
+ *   投入       → UFO の出現抽選
  */
 async function main() {
   // 端末の判定と、それに伴う DOM 側の下ごしらえ (html[data-device] / 拡大の抑止)。
@@ -241,13 +243,33 @@ async function main() {
 
     // 手前の発射口から上段デッキへ撃ち上げる (DESIGN.md §7.2)。
     // 狙いは自動で首を振るので、プレイヤーが決めるのは撃つ瞬間だけ
+    // UFO は発射口を知っている必要があるので、先に器だけ作る (§3.12)
+    let ufo = null;
+
     const launcher = new Launcher(stage.scene, stage.renderer.domElement, pool, {
       canInsert: () => wallet.canInsert(),
       onInsert: () => {
         wallet.spend(1);
         jackpot.onInsert(1);
+        // UFO の出現抽選。**投入1枚ごと**に引く (時間で引くと、誰も撃っていない
+        // ところに出て勝手に去る)。出現率がそのまま払い戻しに乗るので、
+        // ここを動かしたら DESIGN_GIMMICKS.md §4.2 の払い戻しを測り直すこと
+        if (ufo) ufo.rollOnInsert();
       },
     });
+
+    // UFO ボーナス (DESIGN_GIMMICKS.md §3.12)。
+    // 発射した弾道の上に浮かんでいて、直撃を当て続けると固定 100枚。
+    // 払い出しはクルーンと同じくホッパー経由なので、ここで持ち枚数は動かさない
+    ufo = new Ufo(stage.scene, world, RAPIER, {
+      launcher, pool, hopper, sound,
+      // JP のタワーを積んでいる間は台を明け渡す。
+      // 演出中に的が出ても、プレイヤーはそちらを見ていない
+      canAppear: () => !jpShow.running,
+    });
+    // 弾道の頂点は液晶 (z=6.1 / y 4.97〜8.81) の真裏で、そのままでは1ピクセルも
+    // 見えない (実測)。UFO だけ深度を捨ててもう一度描く (core/Renderer.js)
+    stage.setOverlay(ufo.group);
 
     // デバッグパネルは開発ビルドにしか積まない。
     // 本番に残すと D キーで「ジャックポットを撃つ」「この絵柄でまわす」が
@@ -259,7 +281,7 @@ async function main() {
       const { Debug } = await import('./ui/Debug.js');
       debug = new Debug({
         scene: stage.scene, world, pool, stage, payout, slot, hopper, balls,
-        pusher, table, fever, jackpot, jpShow, chute, kuruun,
+        pusher, table, fever, jackpot, jpShow, chute, kuruun, ufo,
       });
     }
 
@@ -283,6 +305,7 @@ async function main() {
         fever.update(dt);
         jpShow.update(dt);
         pusher.update(dt);
+        ufo.update(dt);
 
         world.step(eventQueue || undefined);
 
@@ -330,6 +353,7 @@ async function main() {
         launcher.syncMesh();
         balls.syncMesh(alpha);
         kuruun.syncMesh(alpha);
+        ufo.syncMesh(alpha, realDt);
         slotDisplay.update(realDt);
         pool.sync(alpha);
 
@@ -387,7 +411,7 @@ async function main() {
       window.game = {
         CFG, world, stage, pool, pusher, balls, payout, table, shutters, chute,
         launcher, hopper, slot, slotDisplay, sound, loop, cabinet, debug, antiJam,
-        wallet, ui, fever, jackpot, jpShow, kuruun, feverVideo,
+        wallet, ui, fever, jackpot, jpShow, kuruun, feverVideo, ufo,
       };
     }
   } catch (err) {

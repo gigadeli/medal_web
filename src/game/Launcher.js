@@ -190,6 +190,33 @@ export class Launcher {
     }
   }
 
+  /**
+   * 弾道の上の点 (world)。
+   *
+   * 弾道は首の位置を軸に回転対称なので、「首からの水平距離 h」だけ決めれば
+   * 首の角度 yaw のぶん回すだけでその場の弾道上の点になる。
+   * UFO はここに浮かべてある (DESIGN_GIMMICKS.md §3.12)。
+   * **その水平距離に居る限り、首が向いた瞬間に撃てば必ず当たる**位置になり、
+   * プレイヤーは向きだけを読めばよくなる。
+   *
+   * @param {number} h 首からの水平距離
+   * @param {number} yaw 首の角度 (rad)
+   */
+  arcPoint(h, yaw, out = new THREE.Vector3()) {
+    const path = this.path;
+    // path は [{h, y}] が h の昇順。線形に読む (頂点付近はほぼ平らなので誤差は無視できる)
+    let y = path[path.length - 1].y;
+    for (let i = 1; i < path.length; i++) {
+      if (path[i].h >= h) {
+        const a = path[i - 1], b = path[i];
+        y = a.y + (b.y - a.y) * ((h - a.h) / Math.max(1e-6, b.h - a.h));
+        break;
+      }
+    }
+    const p = this.group.position;
+    return out.set(p.x + h * Math.sin(yaw), p.y + y, p.z - h * Math.cos(yaw));
+  }
+
   _fire() {
     const dir = aimVector(this.yaw);
     const from = dir.clone().multiplyScalar(P.barrel).add(this.group.position);

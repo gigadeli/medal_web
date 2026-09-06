@@ -441,4 +441,39 @@ export class Sound {
     });
     this._tone(400, 0.8, 'sawtooth', 0.12, 0, 2600);
   }
+
+  /* ---- UFO ボーナス (DESIGN_GIMMICKS.md §3.12) ---- */
+
+  /** 現れた。長く尾を引く上昇音で「盤面から目を上げさせる」 */
+  ufoAppear() {
+    this._tone(140, 1.5, 'sawtooth', 0.14, 0, 780);
+    this._tone(1500, 1.1, 'sine', 0.09, 0.10, 900);
+  }
+
+  /**
+   * 直撃した。当てるほど高く鳴らす。
+   * 命中が続いているのが音だけで分かるようにするための音程で、
+   * 残りの数はリムのランプが見せている (game/Ufo.js)
+   */
+  ufoHit(n, max) {
+    const f = 520 * Math.pow(1.08, Math.min(n, max));
+    this._tone(f, 0.08, 'square', 0.22);
+    this._tone(f * 2, 0.13, 'triangle', 0.10, 0.02);
+  }
+
+  /** 撃ち落とした */
+  ufoWin() {
+    const notes = [783.99, 987.77, 1174.66, 1567.98];
+    notes.forEach((f, i) => {
+      this._tone(f, 0.26, 'square', 0.20, i * 0.09);
+      this._tone(f * 2, 0.26, 'triangle', 0.10, i * 0.09);
+    });
+    // 落ちていく音。当たりのファンファーレとは逆向きに下げる
+    this._tone(1400, 0.9, 'sawtooth', 0.14, 0.12, 170);
+  }
+
+  /** 撃ち落とせずに去った */
+  ufoLeave() {
+    this._tone(660, 0.8, 'sine', 0.12, 0, 1900);
+  }
 }

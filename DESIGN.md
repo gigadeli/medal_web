@@ -192,12 +192,12 @@ medal_web/
     ├── main.js           起動シーケンス、ループ配線、初期配置
     ├── config.js         全パラメータ（上記）
     ├── core/
-    │   ├── Renderer.js   scene / camera / light / OrbitControls / 環境マップ
+    │   ├── Renderer.js   scene / camera / light / OrbitControls / 環境マップ / 上描きパス
     │   └── Loop.js       固定タイムステップ + 描画補間
     ├── physics/
     │   └── World.js      Rapier 初期化、EventQueue、Fixed ボックス生成ヘルパ
     ├── audio/
-    │   └── Sound.js      WebAudio による効果音の合成（音声ファイル不使用）
+    │   └── Sound.js      WebAudio による効果音の合成（落球音だけ音声ファイル・§7.5）
     ├── save/
     │   └── SaveStore.js  localStorage への読み書き（§11）
     ├── game/
@@ -206,6 +206,7 @@ medal_web/
     │   ├── LotteryBall.js 抽選ボール（フィールドを転がる球）
     │   ├── MedalPool.js  InstancedMesh + 剛体プール
     │   ├── Launcher.js   発射式の投入（首振り・弾道の逆算・着地ガイド）
+    │   ├── Ufo.js        UFO ボーナス（弾道の上に浮かぶ的・DESIGN_GIMMICKS §3.12）
     │   ├── Hopper.js     当たり分をまとめて降らせる装置
     │   ├── SlotMachine.js スロットの抽選テーブルと保留
     │   ├── SlotDisplay.js 筐体前面の液晶パネル（演出の描画と進行）

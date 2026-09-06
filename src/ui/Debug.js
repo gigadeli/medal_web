@@ -11,7 +11,7 @@ import { CFG } from '../config.js';
  */
 export class Debug {
   constructor({ scene, world, pool, stage, payout, slot, hopper, balls,
-                pusher, table, fever, jackpot, jpShow, chute, kuruun }) {
+                pusher, table, fever, jackpot, jpShow, chute, kuruun, ufo }) {
     this.world = world;
     this.pool = pool;
     this.stage = stage;
@@ -26,6 +26,7 @@ export class Debug {
     this.jpShow = jpShow;
     this.chute = chute;
     this.kuruun = kuruun;
+    this.ufo = ufo;
     this.enabled = false;
 
     // --- Rapier のコライダー可視化 ---
@@ -114,6 +115,16 @@ export class Debug {
     fKuruun.add(CFG.kuruun.entry, 'jitter', 0, 0.4, 0.01).name('初速のばらつき');
     fKuruun.add(CFG.kuruun.dish, 'damp', 0, 1.2, 0.01).name('転がり抵抗');
     fKuruun.add(CFG.kuruun.dish, 'bowlH', 0.05, 0.6, 0.01).name('椀の深さ (要リロード)');
+
+    const fUfo = gui.addFolder('UFO ボーナス');
+    fUfo.add(this, 'ufoSpawn').name('いま出す');
+    fUfo.add(this, 'ufoReport').name('撃墜率をログ');
+    fUfo.add(CFG.ufo, 'hits', 1, 30, 1).name('必要な直撃数 (要リロード)');
+    fUfo.add(CFG.ufo, 'lifeSeconds', 2, 20, 0.5).name('滞空時間 (秒)');
+    fUfo.add(CFG.ufo, 'decaySeconds', 0, 5, 0.1).name('ダメージが戻るまで (秒)');
+    fUfo.add(CFG.ufo, 'driftYaw', 0, 1, 0.02).name('漂う幅 (首振りに対する割合)');
+    fUfo.add(CFG.ufo, 'driftPeriod', 1, 12, 0.1).name('漂う周期 (秒)');
+    fUfo.add(CFG.ufo, 'minIntervalSeconds', 0, 600, 10).name('出現の最短間隔 (秒)');
 
     const fTool = gui.addFolder('ツール');
     fTool.add(this, 'burst50').name('メダル50枚 投入');
@@ -207,6 +218,19 @@ export class Debug {
   };
 
   kuruunTrials = 500;
+
+  /** UFO を1回出す。出現抽選を待たずに演出と当たり判定を見る */
+  ufoSpawn = () => {
+    if (!this.ufo) return;
+    // 直前に出ていても出せるように、最短間隔の縛りだけ外して呼ぶ
+    this.ufo.since = CFG.ufo.minIntervalSeconds;
+    this.ufo.spawn();
+  };
+
+  ufoReport = () => {
+    if (!this.ufo) return;
+    console.table([this.ufo.report()]);
+  };
 
   kuruunReport = () => {
     if (!this.kuruun) return;
