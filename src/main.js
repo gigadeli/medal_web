@@ -362,7 +362,12 @@ async function main() {
           holdMax: CFG.slot.maxQueue,
           steps: fever.steps,
           stepsMax: fever.stepsMax,
-          fever: fever.active ? fever.left : 0,
+          // **秒に丸めて渡す**。生の float を渡すと毎フレーム値が変わり、
+          // SlotDisplay 側が毎フレーム _dirty になって 1024x501 を描き直す。
+          // 液晶の再描画は VID_FPS (30/24Hz) に間引いてあるのに、
+          // フィーバー中だけそれが効かなくなっていた。
+          // 表示は元から Math.ceil しているので見た目は変わらない
+          fever: fever.active ? Math.ceil(fever.left) : 0,
         });
 
         stage.render();

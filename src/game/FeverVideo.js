@@ -29,7 +29,12 @@ export class FeverVideo {
     const el = document.createElement('video');
     el.src = feverUrl;
     el.loop = true;              // 25秒より短い素材でも尺が足りる
-    el.preload = 'auto';
+    // 起動時は尺と寸法だけ取る。'auto' にすると 7.5MB の本体を
+    // **ページを開いた瞬間から**取りに行き、バンドル (gzip 1.3MB) の
+    // 5倍以上の帯域を初回表示と奪い合う (実測: localhost でも 15秒)。
+    // 本体の先読みは prime() まで遅らせる。フィーバーはボールが
+    // stepsToEnter 回落ちるまで来ないので、そこからでも十分間に合う
+    el.preload = 'metadata';
     el.playsInline = true;
     // iOS の Safari は属性側を見る。付けないと再生が全画面に飛ぶ
     el.setAttribute('playsinline', '');
@@ -54,6 +59,10 @@ export class FeverVideo {
     this._primed = true;
     window.removeEventListener('pointerdown', this._unlock);
     window.removeEventListener('keydown', this._unlock);
+
+    // ここで本体の先読みを解禁する。空回しのあと pause() しても
+    // 'auto' ならブラウザは裏で読み続けるので、突入までに揃う
+    this.el.preload = 'auto';
 
     // 音量はここでは上げない。仕込みの空回しが鳴ってしまう
     this._gain = this.sound.connectElement(this.el);
