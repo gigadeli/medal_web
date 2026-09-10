@@ -65,6 +65,12 @@
   margin: 0 0 16px; font-size: 11px; line-height: 1.7; color: #ff8f9b;
 }
 
+/* 同期できていないのは異常ではない (localStorage が正)。
+   警告色にすると「壊れた」と読まれるので、注記の色にとどめる */
+.faint {
+  margin-top: 12px; font-size: 10px; line-height: 1.6; color: var(--dim); opacity: .8;
+}
+
 /* モバイル。幅 320px の端末でも収まるように */
 :global(html[data-device='mobile']) .card {
   min-width: 0; width: min(88vw, 320px); padding: 22px 20px 18px;

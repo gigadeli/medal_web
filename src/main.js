@@ -24,6 +24,8 @@ import { JackpotShow } from './game/JackpotShow.js';
 import { AntiJam } from './game/AntiJam.js';
 import { Wallet } from './game/Wallet.js';
 import { SaveStore } from './save/SaveStore.js';
+import { SyncStore } from './net/SyncStore.js';
+import { getTurnstileToken } from './net/Turnstile.js';
 import { Sound } from './audio/Sound.js';
 import { mountUI } from './ui/mount';
 import { rnd } from './core/Rng.js';
@@ -74,6 +76,22 @@ async function main() {
   );
   if (saved && saved.settings) sound.setMuted(!!saved.settings.muted);
 
+  // --- サーバへのミラー (DESIGN_SERVER.md §9) ---
+  // ここが落ちてもゲームは止まらない。localStorage が正で、D1 はミラー。
+  // main.js がサーバの存在を知るのは、この生成と sink への差し込みまで
+  // UI より先に作る必要がある (wallet.onChange が persist を呼ぶ前に sink が要る) ので、
+  // ハンドルだけ後から入る形にしておく
+  let ui = null;
+  const sync = new SyncStore({
+    getTurnstileToken,
+    onStatus: (s) => ui?.setGame({ syncOffline: s.offline, synced: !!s.serverUserId }),
+    // 登録できた瞬間に localStorage へ焼く。
+    // ここを繋がないと、リロードのたびに新しいユーザーを作りにいく
+    onIdentity: () => persist(),
+  });
+  if (saved) sync.restore(saved.server);
+  SaveStore.sink = sync;
+
   const wallet = new Wallet();
   if (saved) wallet.restore(saved);
 
@@ -96,11 +114,15 @@ async function main() {
     settings: { muted: sound.muted },
     jackpot: jackpot.serialize(),
     steps: fever ? fever.steps : 0,
+    // サーバが発行した ID と rev (DESIGN_SERVER.md §5.4)。
+    // **CFG.save.version は上げない。** 上げると SaveStore.load() が
+    // 既存プレイヤーの通算記録を捨てる。フィールドを足すだけにする
+    server: sync.serialize(),
     ...wallet.serialize(),
   });
   const persist = () => SaveStore.save(snapshot());
 
-  const ui = mountUI(document.getElementById('ui-root'), {
+  ui = mountUI(document.getElementById('ui-root'), {
     onRestart: () => wallet.reset(),
     onClearData: () => {
       SaveStore.clear();
@@ -113,6 +135,20 @@ async function main() {
     },
     // 保存は描画ループ側の lastMuted の比較が拾う (M キーと同じ経路)
     onToggleMute: () => sound.toggleMute(),
+
+    /* ---- サーバ機能 (DESIGN_SERVER.md §5.3 / §8.5) ----
+       どれも失敗したら null / false を返すだけで、例外は上がってこない */
+    onFetchRanking: () => sync.ranking(),
+    onIssueTransferCode: () => sync.issueCode(),
+    onRedeemTransferCode: async (code) => {
+      const payload = await sync.redeemCode(code);
+      if (!payload) return false;
+      // マージせず置き換える (§15-4)。動いている盤面に差し込むより、
+      // 書いてから読み直すほうが確実
+      SaveStore.replace({ ...payload, server: sync.serialize() });
+      window.location.reload();
+      return true;
+    },
   });
 
   // ストアへの反映は UI ができてから配線する (Wallet 側は UI も保存も知らない)
@@ -136,7 +172,9 @@ async function main() {
 
   // タブを閉じる / 隠れるときに書き切る。
   // beforeunload はモバイルのアプリ切り替えで発火しないので使わない
-  const flush = () => { SaveStore.save(snapshot()); SaveStore.flush(); };
+  // finalize は localStorage に書き切り、サーバへは sendBeacon で送る。
+  // 通常の flush と分けているのは、2秒デバウンスの満了でビーコンを飛ばさないため
+  const flush = () => SaveStore.finalize(snapshot());
   window.addEventListener('pagehide', flush);
   window.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flush();

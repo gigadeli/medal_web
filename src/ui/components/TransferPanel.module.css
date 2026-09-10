@@ -1,0 +1,58 @@
+.root {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(120, 160, 220, .07);
+  border: 1px solid rgba(140, 165, 210, .18);
+}
+
+.label {
+  font-size: 11px; letter-spacing: .08em; color: var(--dim); margin-bottom: 8px;
+}
+
+/* コードは打ち間違えると通らないので、字を大きく・等幅で・字間を空ける */
+.code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px; letter-spacing: .18em; font-weight: 700;
+  color: var(--accent);
+  user-select: all;               /* ここだけ選択できるようにする */
+  -webkit-user-select: all;
+  margin-bottom: 8px;
+}
+
+.input {
+  font: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px; letter-spacing: .14em; text-align: center;
+  width: 100%; box-sizing: border-box;
+  color: var(--ink); background: rgba(3, 5, 10, .6);
+  border: 1px solid rgba(140, 165, 210, .3); border-radius: 8px;
+  padding: 10px 8px; margin-bottom: 10px;
+  text-transform: uppercase;
+}
+.input:focus { outline: none; border-color: var(--accent); }
+
+.note { margin-top: 8px; font-size: 10px; line-height: 1.6; color: var(--dim); }
+.error { margin-top: 8px; font-size: 11px; line-height: 1.6; color: #ff8f9b; }
+
+.links { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin-top: 12px; }
+
+.link {
+  font: inherit; font-size: 11px; letter-spacing: .1em;
+  color: var(--dim); background: none; border: 0; cursor: pointer;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.link:hover { color: var(--ink); }
+.link:disabled { opacity: .5; cursor: default; }
+
+.buttons { display: flex; gap: 10px; justify-content: center; }
+.ghost {
+  font: inherit; font-size: 12px; letter-spacing: .1em;
+  color: var(--dim); background: transparent;
+  border: 1px solid rgba(140, 165, 210, .3); border-radius: 8px;
+  padding: 9px 20px; cursor: pointer;
+}
+.ghost:hover { filter: brightness(1.12); color: var(--ink); }
+.ghost:disabled { opacity: .5; cursor: default; }
+
+:global(html[data-device='mobile']) .code { font-size: 19px; letter-spacing: .12em; }

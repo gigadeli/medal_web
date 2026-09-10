@@ -1,0 +1,27 @@
+# 静的アセットに付ける応答ヘッダ (DESIGN_SERVER.md §15-8)
+#
+# Workers Static Assets が読む。dist/ に置かれるが、それ自体は配信されない。
+# ※ ここは **静的側だけ**。/api/* の応答ヘッダは
+#    src/server/middleware/core.ts の security ミドルウェアが付ける。
+#
+# ■ なぜ CSP を入れたか
+#   初稿では「優先度が低い」として見送っていた。認証 Cookie を持った時点で
+#   XSS の価値が上がったので、やることに変更した (§15-8)。
+#   外部スクリプトを一切読んでいないので (DESIGN_SECURITY.md §4)、
+#   'self' で締めてもそのまま動く。
+#
+# ■ 'wasm-unsafe-eval' が要る理由
+#   Rapier (物理エンジン) が WebAssembly をコンパイルする。
+#   これが無いと起動しない。'unsafe-eval' とは別物で、eval は許可しない。
+#
+# ■ style-src に 'unsafe-inline' が残っている理由
+#   index.html が「JS が読まれる前に必要な最低限」を <style> で持っている。
+#   スタイルの inline はスクリプトの inline とは危険度が桁違いなので許容する。
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; worker-src 'self' blob:; frame-src https://challenges.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+# 内容ハッシュ入りのファイル名なので、長期キャッシュしてよい
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

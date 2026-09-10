@@ -5,11 +5,16 @@ import { ControlsBar } from './components/ControlsBar';
 import { GameOverOverlay } from './components/GameOverOverlay';
 import { LoadingOverlay } from './components/LoadingOverlay';
 
+import type { Ranking, TransferCode } from './store';
+
 type Props = {
   error?: string | null;
   onRestart?: () => void;
   onClearData?: () => void;
   onToggleMute?: () => void;
+  onFetchRanking?: () => Promise<Ranking | null>;
+  onIssueTransferCode?: () => Promise<TransferCode | null>;
+  onRedeemTransferCode?: (code: string) => Promise<boolean>;
 };
 
 const noop = () => {};
@@ -22,7 +27,10 @@ const noop = () => {};
  * JP・STEP・倍率は筐体の液晶 (game/SlotDisplay.js) が受け持つ。
  * HUD に出すのは「プレイヤーの持ち物」だけにして、盤面の上を空けておく。
  */
-export function App({ error, onRestart, onClearData, onToggleMute }: Props) {
+export function App({
+  error, onRestart, onClearData, onToggleMute,
+  onFetchRanking, onIssueTransferCode, onRedeemTransferCode,
+}: Props) {
   return (
     <>
       <WalletPanel />
@@ -32,6 +40,9 @@ export function App({ error, onRestart, onClearData, onToggleMute }: Props) {
       <GameOverOverlay
         onRestart={onRestart ?? noop}
         onClearData={onClearData ?? noop}
+        onFetchRanking={onFetchRanking}
+        onIssueTransferCode={onIssueTransferCode}
+        onRedeemTransferCode={onRedeemTransferCode}
       />
       <LoadingOverlay error={error} />
     </>

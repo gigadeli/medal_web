@@ -22,5 +22,7 @@
     "resolveJsonModule": true,
     "types": ["vite/client"]
   },
-  "include": ["src"]
+  /* Worker 側は DOM を持たず types も違うので tsconfig.worker.json で別に見る */
+  "include": ["src"],
+  "exclude": ["src/server"]
 }

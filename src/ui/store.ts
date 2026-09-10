@@ -59,6 +59,10 @@ export type GameState = {
   gameOver: boolean;
   /** localStorage に書けていない (プライベートモード / 容量超過) */
   saveError: boolean;
+  /** サーバに登録済み。false ならまだ一度も同期していない (DESIGN_SERVER.md §5.2) */
+  synced: boolean;
+  /** サーバへ送れていない。ゲームは動くので、出すのは小さな注記だけ */
+  syncOffline: boolean;
   hold: number;
   holdMax: number;
   muted: boolean;
@@ -84,6 +88,27 @@ export type GameState = {
   jpPhase: string;
 };
 
+/**
+ * ランキングの応答 (DESIGN_SERVER.md §8.5)
+ *
+ * 名前も順位も出さない。出すのは「上位 N%」だけ。
+ * `ineligible` は不正の疑いではなく、参加資格 (サーバ実測のプレイ時間と日数) に
+ * まだ届いていないという意味。資格が分母を守っている。
+ */
+export type Ranking =
+  | { status: 'ineligible'; needPlayMs: number; needDays: number }
+  | { status: 'building'; population: number }
+  | {
+      status: 'ok';
+      topPercent: number;
+      population: number;
+      best: number;
+      /** 数字は検証していない。画面に必ず出す (DESIGN_SECURITY.md §5 案3) */
+      unverified: boolean;
+    };
+
+export type TransferCode = { code: string; expiresInMs: number };
+
 export type StatsState = {
   fps: number;
   /** フィールド上のメダル数 (持ち枚数とは別物) */
@@ -99,6 +124,8 @@ export const gameStore = new Store<GameState>({
   lost: 0,
   gameOver: false,
   saveError: false,
+  synced: false,
+  syncOffline: false,
   hold: 0,
   holdMax: 3,
   muted: false,

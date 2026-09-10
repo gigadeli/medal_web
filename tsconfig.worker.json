@@ -1,0 +1,27 @@
+{
+  /* Worker 側は DOM を持たない。ブラウザ側 (tsconfig.json) とは lib も types も違うので、
+     設定を分けて `npm run typecheck` で両方を通す。
+     src/config.js だけは両方から import される (しきい値の単一情報源。§8 limits.ts)。 */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+
+    "allowJs": true,
+    "checkJs": false,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src/server"]
+}

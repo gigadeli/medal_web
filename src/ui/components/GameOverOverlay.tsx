@@ -1,10 +1,16 @@
 import { useState } from 'react';
-import { gameStore, useStore } from '../store';
+import { gameStore, useStore, type Ranking, type TransferCode } from '../store';
+import { RankingLine } from './RankingLine';
+import { TransferPanel } from './TransferPanel';
 import styles from './GameOverOverlay.module.css';
 
 type Props = {
   onRestart: () => void;
   onClearData: () => void;
+  /* サーバ機能 (DESIGN_SERVER.md)。未接続なら渡らず、その部分は描かれない */
+  onFetchRanking?: () => Promise<Ranking | null>;
+  onIssueTransferCode?: () => Promise<TransferCode | null>;
+  onRedeemTransferCode?: (code: string) => Promise<boolean>;
 };
 
 /**
@@ -15,8 +21,12 @@ type Props = {
  * 「記録を消す」はここに置いている。設定画面を新設するより安く、
  * 記録をリセットしたくなるのはたいていゲームオーバーの直後なので（DESIGN.md §11.8）。
  */
-export function GameOverOverlay({ onRestart, onClearData }: Props) {
-  const { gameOver, best, inserted, earned, lost, saveError } = useStore(gameStore);
+export function GameOverOverlay({
+  onRestart, onClearData, onFetchRanking, onIssueTransferCode, onRedeemTransferCode,
+}: Props) {
+  const {
+    gameOver, best, inserted, earned, lost, saveError, syncOffline, synced,
+  } = useStore(gameStore);
   const [confirming, setConfirming] = useState(false);
 
   if (!gameOver) return null;
@@ -37,10 +47,13 @@ export function GameOverOverlay({ onRestart, onClearData }: Props) {
           <span>ロスト</span><b>{lost}</b>
         </div>
 
+        {!confirming && <RankingLine onFetch={onFetchRanking} />}
+
         {confirming ? (
           <>
             <div className={styles.warn}>
               通算の記録と最高記録がすべて消えます。元に戻せません。
+              {synced && <><br />サーバ上の記録も一緒に消えます。</>}
             </div>
             <div className={styles.buttons}>
               <button className={styles.danger} onClick={clear}>消す</button>
@@ -56,10 +69,16 @@ export function GameOverOverlay({ onRestart, onClearData }: Props) {
             <button className={styles.link} onClick={() => setConfirming(true)}>
               記録を消す
             </button>
+            <TransferPanel onIssue={onIssueTransferCode} onRedeem={onRedeemTransferCode} />
             {saveError && (
               <div className={styles.warn}>
                 このブラウザでは記録を保存できていません
               </div>
+            )}
+            {/* サーバに送れていないだけ。localStorage が正なのでゲームは動く。
+                黙って消えるのが一番不親切なので、小さく出す (DESIGN.md §11.4) */}
+            {syncOffline && !saveError && (
+              <div className={styles.faint}>サーバと同期できていません</div>
             )}
           </>
         )}

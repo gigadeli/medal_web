@@ -1,0 +1,72 @@
+# Cloudflare Workers へのデプロイ (DESIGN_SERVER.md §10)
+#
+# main に push すると Vite でビルドし、D1 のマイグレーションを当ててから
+# Worker をデプロイする。dist/ は Workers Static Assets として一緒に上がる。
+#
+# ■ 最初に1回だけ必要な設定
+#   1. npx wrangler d1 create medal_web
+#      → 出た database_id を wrangler.jsonc に貼る
+#   2. リポジトリの Settings → Secrets and variables → Actions に
+#      CLOUDFLARE_API_TOKEN  (Workers Scripts:Edit と D1:Edit の権限)
+#      CLOUDFLARE_ACCOUNT_ID
+#   3. 本番で bot 対策を効かせるなら (§15-3)
+#      npx wrangler secret put TURNSTILE_SECRET
+#      と、リポジトリ変数 VITE_TURNSTILE_SITE_KEY
+#
+# ■ deploy-pages.yml をまだ消していない理由
+#   Workers 側で事故ったときに「静的だけは生きている URL」が残るのは安い。
+#   切り替えが安定するまでは両方流す (§10)。
+name: Deploy to Cloudflare Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 走っているデプロイは止めない。後から来たものを待たせる
+concurrency:
+  group: workers-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Vite 8 は Node 20.19+ / 22.12+ が要る
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Vite のビルドは型を見ないので、型チェックは別に通す。
+      # ブラウザ側と Worker 側で tsconfig が分かれている (両方走る)
+      - run: npm run typecheck
+
+      - run: npm run build
+        env:
+          # 未設定なら Turnstile のウィジェットは出ない (§15-3)
+          VITE_TURNSTILE_SITE_KEY: ${{ vars.VITE_TURNSTILE_SITE_KEY }}
+
+      # ★ deploy より前に流す。
+      #   逆順にすると、新しいコードが存在しないカラムを読んで
+      #   500 を返す時間帯ができる (§6.3)
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply medal_web --remote
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy

@@ -2,3 +2,10 @@ node_modules/
 dist/
 .vite/
 *.log
+
+# wrangler のローカル状態 (ローカル D1 の SQLite ファイルなど)
+.wrangler/
+
+# Turnstile のサイトキーなど。VITE_ 接頭辞の値はバンドルに載るので秘密は入れない
+.env
+.env.local

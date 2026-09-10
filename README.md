@@ -16,7 +16,21 @@ npm run dev
 ```bash
 npm run build      # dist/ に静的ファイルを出力（相対パスなのでそのまま配信可）
 npm run preview
-npm run typecheck  # UI（TypeScript）の型チェック
+npm run typecheck  # UI と Worker、両方の TypeScript の型チェック
+```
+
+### サーバ機能つきで動かす（任意）
+
+セーブのバックアップ・端末間引き継ぎ・ランキングは Cloudflare Workers + D1 で動きます
+（設計は `DESIGN_SERVER.md`）。**使わなくてもゲームはそのまま遊べます。**
+セーブの正は localStorage 側にあり、サーバに繋がらなければ黙って諦めるだけです。
+
+```bash
+npx wrangler d1 create medal_web   # 出た database_id を wrangler.jsonc に貼る
+npm run db:migrate                 # ローカル D1 にスキーマを当てる
+
+npm run dev:api                    # 端末1: wrangler dev (:8787)
+npm run dev                        # 端末2: vite (:5173、/api は :8787 へ転送)
 ```
 
 ### GitHub Pages に置く
@@ -41,6 +55,10 @@ npm run typecheck  # UI（TypeScript）の型チェック
 | `src/ui/` | HUD（持ち枚数・配当表・計測値・ゲームオーバー）。**React + TypeScript** |
 | `src/game/SlotDisplay.js` | スロットの演出。筐体前面の液晶として 3D シーンの中に描く |
 | `src/ui/mount.tsx` | 両者の唯一の境界。ゲームループは React を知らない |
+| `src/save/SaveStore.js` | セーブ。**localStorage を知っているのはここだけ** |
+| `src/net/` | サーバ同期。**fetch を知っているのはここだけ**（`ApiClient.js`）|
+| `src/server/` | Cloudflare Worker。`middleware/` `routes/` `db/` `domain/` に分かれる。**SQL を書いてよいのは `db/` だけ** |
+| `migrations/` | D1 のスキーマ |
 
 UI の状態は `src/ui/store.ts` の小さな外部ストアを `useSyncExternalStore` で購読しています。
 ゲームループは毎フレーム書き込んでよく、**値が実際に変わったときだけ**再レンダリングが走ります

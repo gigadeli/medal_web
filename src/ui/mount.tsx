@@ -1,7 +1,10 @@
 import { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { App } from './App';
-import { gameStore, statsStore, type GameState, type StatsState } from './store';
+import {
+  gameStore, statsStore,
+  type GameState, type Ranking, type StatsState, type TransferCode,
+} from './store';
 import './theme.css';
 
 export type MountOptions = {
@@ -11,6 +14,14 @@ export type MountOptions = {
   onClearData: () => void;
   /** 消音の切り替え (キーボードの M と同じ操作)。キーの無い端末用 */
   onToggleMute?: () => void;
+
+  /* ---- サーバ機能 (DESIGN_SERVER.md)。未接続なら渡さなくてよい ---- */
+  /** パーセンタイルを引く (§8.5) */
+  onFetchRanking?: () => Promise<Ranking | null>;
+  /** 引き継ぎコードを発行する (§5.3) */
+  onIssueTransferCode?: () => Promise<TransferCode | null>;
+  /** 引き継ぎコードを使う。成功したらページが読み直される */
+  onRedeemTransferCode?: (code: string) => Promise<boolean>;
 };
 
 export type UIHandle = {
@@ -37,6 +48,9 @@ export function mountUI(container: HTMLElement, options: MountOptions): UIHandle
     onRestart: options.onRestart,
     onClearData: options.onClearData,
     onToggleMute: options.onToggleMute ?? noop,
+    onFetchRanking: options.onFetchRanking,
+    onIssueTransferCode: options.onIssueTransferCode,
+    onRedeemTransferCode: options.onRedeemTransferCode,
   };
   root.render(
     <StrictMode>

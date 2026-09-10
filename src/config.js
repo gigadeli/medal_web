@@ -923,6 +923,25 @@ export const CFG = {
   },
 
   /**
+   * サーバ同期 (DESIGN_SERVER.md §7.1)
+   *
+   * localStorage が正で、D1 はミラー。ここが落ちてもゲームは止まらない。
+   *
+   * ■ デバウンスが localStorage の 30 倍長い理由
+   *   `wallet.onChange` はメダル1枚ごとに発火する。同じ頻度で D1 に書くと
+   *   無料枠の書き込み 10万行/日 が溶ける。60秒なら
+   *   1セッション 20分で 20回 × 3行 = 60行、約 1,600 セッション/日 まで収まる。
+   *   足りなくなったら、まずここを 180000 にする。
+   */
+  sync: {
+    debounceMs: 60000,
+    /** 同期の再開までの待ち。失敗が続いたときに叩き続けない */
+    retryMs: 120000,
+    /** ランキングを引き直す間隔。分布表は10分おきにしか変わらない */
+    rankingMs: 300000,
+  },
+
+  /**
    * 発射式の投入 (DESIGN.md §7.2)
    *
    * 上から落とすのではなく、**手前の発射口から上段デッキへ撃ち上げる**。
@@ -1030,4 +1049,14 @@ function deepFreeze(o) {
   return Object.freeze(o);
 }
 
-if (!import.meta.env.DEV) deepFreeze(CFG);
+/**
+ * 本番ビルドでは CFG を凍結する (DESIGN_SECURITY.md §2.5)。
+ * `CFG.pusher.strokeHalf = 2` の一行で払い出しが蛇口になっていたため。
+ *
+ * `import.meta.env` を存在確認してから見ているのは、このファイルを
+ * **Cloudflare Worker からも import する**ため (DESIGN_SERVER.md §8 limits.ts)。
+ * しきい値をサーバに書き写さず単一の情報源にしたいが、workerd には
+ * `import.meta.env` が無く、素で読むと起動時に TypeError で落ちる。
+ * Worker 側は CFG を読むだけなので、凍結されて困らない。
+ */
+if (!(import.meta.env && import.meta.env.DEV)) deepFreeze(CFG);

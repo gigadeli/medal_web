@@ -18,6 +18,14 @@ class SaveStoreImpl {
     this.lastError = null;
     this._pending = null;
     this._timer = 0;
+    /**
+     * サーバへのミラー (DESIGN_SERVER.md §9)。
+     *
+     * 差し込まれなければ何も起きない。localStorage が正で、ここは付け足し。
+     * `main.js` が `SaveStore.sink = new SyncStore(...)` と書くだけでつながり、
+     * ゲーム側もこのファイルの読み書きの手順も変わらない。
+     */
+    this.sink = null;
   }
 
   /** プライベートウィンドウなどでは localStorage が使えない、または例外を投げる */
@@ -66,6 +74,9 @@ class SaveStoreImpl {
 
   /** 値が変わったら呼ぶ。実際の書き込みはまとめて行う */
   save(state) {
+    // ミラーは localStorage が使えるかどうかとは独立に動かす。
+    // プライベートモードでも Cookie さえ通れば端末間の引き継ぎは成立する
+    this.sink?.push(state);
     if (!this.available) return;
     this._pending = state;
     if (this._timer) return;
@@ -73,6 +84,23 @@ class SaveStoreImpl {
       this._timer = 0;
       this.flush();
     }, CFG.save.debounceMs);
+  }
+
+  /**
+   * 引き継ぎで受け取ったセーブでローカルを置き換える (DESIGN_SERVER.md §5.3)。
+   *
+   * `save()` を使わないのは、sink に送り返さないため。
+   * そして **マージしない**。マージすると2つのアカウントの通算記録を
+   * 合流させられる (§15-4)。
+   */
+  replace(state) {
+    if (!this.available) return;
+    try {
+      window.localStorage.setItem(KEY, JSON.stringify(state));
+      this.lastError = null;
+    } catch (e) {
+      this.lastError = e;
+    }
   }
 
   /** pagehide などから即時に書く */
@@ -93,8 +121,23 @@ class SaveStoreImpl {
     }
   }
 
+  /**
+   * タブを閉じる / 隠れるときの最後の1回 (DESIGN.md §11.4 / DESIGN_SERVER.md §4.5)。
+   *
+   * `flush()` と分けているのは、`flush()` が2秒デバウンスの満了でも呼ばれるため。
+   * ここを `flush()` に混ぜると、サーバへのビーコンが2秒ごとに飛ぶ。
+   * この中では非同期処理ができないので、sink 側も sendBeacon に切り替わる。
+   */
+  finalize(state) {
+    this.save(state);
+    this.flush();
+    this.sink?.beacon(state);
+  }
+
   /** 記録を消す。userId も一緒に消える */
   clear() {
+    // サーバ側も行ごと消す。待たない (押した直後に UI を止めない)
+    void this.sink?.clear();
     this._pending = null;
     if (this._timer) {
       window.clearTimeout(this._timer);
