@@ -448,6 +448,10 @@ PUT /api/save { rev: 41, payload: {...} }     ← 前回サーバがくれた値
   サーバの rev != 41 → 409 + サーバ側の { rev, payload } を返す
 ```
 
+**照合と書き込みは1つの SQL 文で行います**（§16-11）。
+「読む → 比べる → 書く」に分けると、同時に届いた2本が両方とも検査を通ります。
+本番で `visibilitychange` と `pagehide` の beacon が 1ms 差で届き、実際に両方通りました。
+
 409 を受けたクライアントは **マージして1回だけ再送**します。マージ規則:
 
 | フィールド | 規則 | 理由 |
@@ -869,6 +873,7 @@ IP を散らされると実効上限はずっと高くなります。
 | 8 | ★ **登録に成功しても `server.userId` が localStorage に書き戻らず、リロードのたびに新しいユーザーを作っていた。** §15-3 で塞いだはずの「書き込み枠を焼く」経路を自分で開けていた（実測で3回の再登録を観測） | `SyncStore` に `onIdentity` を足し、識別子が変わったときだけ `persist()` を呼ぶ。**`rev` の変化では呼ばない** —— 呼ぶと「保存→同期→保存」の輪ができて、誰も遊んでいないのに書き込みが止まらなくなる |
 | 9 | **401 から復帰できなかった。** 別端末で「記録を消す」を押されたり Cookie が切れたりすると、死んだ ID で PUT を撃ち続ける | 401 を受けたら identity を捨てて、次の同期で登録し直す |
 | 10 | **`@cloudflare/vite-plugin` が出力を `dist/client` と `dist/<worker名>` に組み替える。** `assets.directory: "./dist"` が合わなくなり、Pages へのフォールバックも壊れる | プラグインをやめ、Vite の dev プロキシで `/api` を `wrangler dev` に転がす。`vite build` の出力は今日とまったく同じ（§10） |
+| 11 | ★ **`rev` の照合がアトミックでなかった。** 本番で `visibilitychange` と `pagehide` の両方から `sendBeacon` が飛び、**1ms 差で2本**が届いた。ハンドラが「読む→比べる→書く」に分かれていたため両方が `rev=1` を読んで両方が通り、両方が書いた（`rev` が 3 ではなく 2 で止まったのが証拠）。**2端末が同時に同期すると 409 を返さずに片方が黙って消える** —— §7.2 が防ぐはずのケースそのもの | 書き込みを `INSERT ... ON CONFLICT DO UPDATE ... WHERE saves.rev = ?` の**1文**にした。SQLite が1文の中で評価するので同時に来ても片方しか通らない。事前の読みは「サーバ側の payload を返してマージさせる」ための親切な経路として残し、**競合の検査そのものは SQL 側**に移した |
 
 ### 16.2 実測
 
@@ -906,11 +911,25 @@ IP を散らされると実効上限はずっと高くなります。
 参加資格による分母の保護、Cookie 方針、`db/` に SQL を閉じ込める構造は
 そのまま動きました。**`Wallet` / 物理 / 演出 / `Jackpot` は1行も変えていません。**
 
-### 16.4 まだ試していないこと
+### 16.4 本番（`medal-web.r0venloy.workers.dev`）で実測
+
+`wrangler tail` は**実際のリクエストヘッダを出す**ので、これで未検証だった前提を潰しました。
+
+| 試したこと | 結果 |
+|---|---|
+| ★ **`sendBeacon` は `Origin` を送るか**（§15-13 / §16.4-1 だった宿題） | **送る。** 別オリジン（`http://localhost:5173`）からの beacon が `origin: http://localhost:5173` / `sec-fetch-site: cross-site` を伴って届き、**403 `bad_origin`** で弾かれた。§4.5 の CSRF 防御は2枚とも機能している |
+| 同一オリジンの `pagehide` beacon | **200**、`content-type: application/json`、`origin: https://medal-web.r0venloy.workers.dev`。**JSON の Blob を送れているのは同一オリジンだからで**（§15-14）、オリジンを分ける構成にすればここが壊れる |
+| CSP（`public/_headers`） | HTML の応答に付いている。**CSP 下で Rapier の WASM も動画も正常に動く** ✓ |
+| 本番ビルドの防御 | `typeof window.game === 'undefined'` ✓（`DESIGN_SECURITY.md §2.2` が維持されている）、`document.cookie` は `""` ✓ |
+| ハッシュ付きアセット | `Cache-Control: public, max-age=31536000, immutable` ✓ |
+| ブラウザからの初回同期 | `POST /api/session` → `PUT /api/save` が**各1回**。D1 に users/sessions/saves/scores が 1 行ずつ。`play_ms` はサーバ実測 ✓ |
+| ★ **同じ `rev` で PUT を2本同時** | 修正前: 両方 200（＝競合を検出できていない）。修正後: **200 が1本、409 が1本**。409 には勝者の payload が乗るのでマージできる ✓ |
+
+### 16.5 まだ試していないこと
 
 | # | 内容 |
 |---|---|
-| 1 | **`sendBeacon` が `Origin` を送るか**（§15-13）。ローカルでは `POST /api/save/beacon` が 401 で返る経路までしか確認できていない。本番相当の環境で `Origin` ヘッダの有無を実測すること。送っていない場合、CSRF 防御は `SameSite=Lax` の1枚になる |
-| 2 | **Turnstile を有効にした状態**。`TURNSTILE_SECRET` 未設定で素通しする経路しか通していない |
-| 3 | **`ratelimits` binding の 429**。ローカルの `wrangler dev` では実挙動を確認していない |
-| 4 | **`--remote` の D1**。マイグレーションはローカルにしか当てていない |
+| 1 | **Turnstile を有効にした状態**。`TURNSTILE_SECRET` 未設定で素通しする経路しか通していない。**未設定のあいだは §15-1 の Sybil と §15-3 の書き込み枠 DoS が開いたまま** |
+| 2 | **`ratelimits` binding の 429**。実際に上限まで叩いていない |
+| 3 | **ランキングが `status: 'ok'` になる状態**。資格（30分 + 3日）を満たす実データがまだ無い |
+| 4 | **cron の本番動作**。`*/10 * * * *` で登録済みだが、分布表が作られたことを本番では確認していない |

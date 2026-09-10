@@ -29,7 +29,7 @@
     {
       "binding": "DB",
       "database_name": "medal_web",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "0f71529b-7df5-4b38-9ce2-259087502608",
       "migrations_dir": "migrations"
     }
   ],

@@ -13,7 +13,7 @@ import { requireIdentity } from '../middleware/identity.js';
 import { extractClaim, parseSaveRequest, ValidationError } from '../domain/schema.js';
 import { applyClaim } from '../domain/plausibility.js';
 import { getUser, touchUserStmt } from '../db/users.js';
-import { getSave, upsertSaveStmt } from '../db/saves.js';
+import { getSave, tryWriteSave } from '../db/saves.js';
 import { getScore, upsertScoreStmt } from '../db/scores.js';
 import { MAX_BODY_BYTES } from '../domain/limits.js';
 
@@ -78,10 +78,27 @@ const writeSave: Handler<AppEnv> = async (c) => {
     score, extractClaim(req.payload), now, user.last_seen_at, user.created_at
   );
 
-  const nextRev = storedRev + 1;
+  /* 書き込みは1文で条件付きに行う。上の rev 検査は
+     「サーバ側の payload を返してマージさせる」ための親切な経路であって、
+     **競合の検査そのものはここ**。分けると 1ms 差の同時リクエストが
+     両方通る（本番で実測。db/saves.ts の注記を参照） */
+  const nextRev = await tryWriteSave(
+    db, userId, storedRev, serialized, req.clientSavedAt, now
+  );
+  if (nextRev === null) {
+    const fresh = await getSave(db, userId);
+    return c.json(
+      {
+        error: 'conflict',
+        rev: fresh?.rev ?? storedRev,
+        payload: fresh ? (JSON.parse(fresh.payload) as unknown) : null,
+      },
+      409
+    );
+  }
+
   await db.batch([
     touchUserStmt(db, userId, now),
-    upsertSaveStmt(db, userId, nextRev, serialized, req.clientSavedAt, now),
     upsertScoreStmt(db, userId, next, now),
   ]);
 
